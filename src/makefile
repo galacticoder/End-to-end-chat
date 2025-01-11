@@ -1,6 +1,6 @@
 CXX = g++
 CXXFLAGS = -Wall -Wextra -std=c++20
-LIBS = -lfmt -lssl -lcrypto
+LIBS = -lfmt -lssl -lcrypto -lcryptopp
 
 TARGETS = server client
 

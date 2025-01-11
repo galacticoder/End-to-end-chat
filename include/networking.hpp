@@ -122,3 +122,9 @@ public:
 		return accept(serverSocket, (struct sockaddr *)&clientAddress, &clientLen);
 	}
 };
+
+class Receive
+{
+private:
+public:
+}
