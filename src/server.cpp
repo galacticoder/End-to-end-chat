@@ -6,6 +6,7 @@
 #include <cstring>
 #include <fstream>
 #include <vector>
+#include <thread>
 #include "../include/keys.hpp"
 #include "../include/ssl.hpp"
 #include "../include/file_handling.hpp"
@@ -23,11 +24,24 @@ void handleClient(SSL *ssl)
 
 	if ((bytes = SSL_read(ssl, buffer, sizeof(buffer) - 1)) <= 0)
 	{
-		std::cerr << "Error: Failed to read key and IV from client." << std::endl;
+		std::cerr << "Error: Failed to public key from client." << std::endl;
 		return;
 	}
 	buffer[bytes] = '\0';
-	std::string serialized(buffer);
+	std::string publicKey(buffer);
+
+	Server::publicKeyData.push_back(publicKey);
+	Server::publicKeyData.push_back("dfds");
+	Server::publicKeyData.push_back("gfdfi");
+
+	if (!Send::sendAllPublicKeys(ssl, Server::publicKeyData, publicKey))
+	{
+		// clean up client here
+	}
+
+	std::string serialized;
+	if ((serialized = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
+		return;
 
 	std::cout << "Received serialized key and IV: " << serialized << std::endl;
 
@@ -38,13 +52,11 @@ void handleClient(SSL *ssl)
 	Deserialize::deserializeKeyAndIV(serialized, key, sizeof(key), iv, sizeof(iv));
 	encryption.SetKeyWithIV(key, sizeof(key), iv, sizeof(iv));
 
-	if ((bytes = SSL_read(ssl, buffer, sizeof(buffer) - 1)) <= 0)
+	std::string ciphertext;
+	if ((ciphertext = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
 	{
-		std::cerr << "Error: Failed to read ciphertext from client." << std::endl;
 		return;
 	}
-	buffer[bytes] = '\0';
-	std::string ciphertext(buffer);
 
 	std::cout << "Received ciphertext: " << ciphertext << std::endl;
 

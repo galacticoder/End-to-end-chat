@@ -1,2 +1,4 @@
 /.vscode
 /files
+/src/client
+/src/server

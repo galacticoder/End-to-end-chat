@@ -12,8 +12,11 @@ const std::string keysDirectory = "../keys/";
 const std::string serverPrivateKeyPath = keysDirectory + "serverPrivateKey.key";
 const std::string serverCertPath = keysDirectory + "serverCert.crt";
 
-const std::string clientPrivateKeyPath = keysDirectory + "clientPrivateKey.key";
+const std::string clientPrivateKeyCertPath = keysDirectory + "clientPrivateKeyCert.key";
 const std::string clientCertPath = keysDirectory + "clientCert.crt";
+
+const std::string clientPrivateKeyPath = keysDirectory + "clientPrivateKey.pem";
+const std::string clientPublicKeyPath = keysDirectory + "clientPublicKey.pem";
 
 class FileTransferManager
 {
@@ -119,5 +122,43 @@ struct DeletePath
 		}
 
 		std::cout << fmt::format("Deleted path: {}", path) << std::endl;
+	}
+};
+
+struct SaveFile
+{
+	SaveFile(const std::string &filePath, const std::string &contentsToWrite, std::ios_base::openmode fileMode = std::ios_base::out)
+	{
+		std::ofstream file(filePath, fileMode);
+
+		if (file.is_open())
+		{
+			file << contentsToWrite;
+			return;
+		}
+
+		if (!std::filesystem::is_regular_file(filePath))
+		{
+			std::cout << fmt::format("Could not open file '{}' to write data: {}", filePath, contentsToWrite);
+			exit(EXIT_FAILURE);
+		}
+	}
+};
+
+struct ReadFile
+{
+	ReadFile() = default;
+	static std::string ReadPemKeyContents(const std::string &pemKeyPath)
+	{
+		std::ifstream keyFile(pemKeyPath);
+		if (keyFile.is_open())
+		{
+			std::string pemKey((std::istreambuf_iterator<char>(keyFile)), std::istreambuf_iterator<char>());
+			keyFile.close();
+			return pemKey;
+		}
+
+		std::cout << "Could not open pem file: " << pemKeyPath << std::endl;
+		return "";
 	}
 };

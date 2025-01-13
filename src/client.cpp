@@ -15,32 +15,35 @@
 std::function<void(int)> shutdownHandler;
 void signalHandle(int signal) { shutdownHandler(signal); }
 
-void sendMessage(SSL *ssl)
+void communicateWithServer(SSL *ssl)
 {
+	// send rsa key
+	GenerateKeys::generateRSAKeys(clientPrivateKeyPath, clientPublicKeyPath);
+	std::cout << "Made rsa keys" << std::endl;
+
+	const std::string publicKeyData = ReadFile::ReadPemKeyContents(clientPublicKeyPath);
+	SSL_write(ssl, publicKeyData.data(), publicKeyData.length());
+
+	Receive::receiveAllPublicKeys(ssl);
+
+	//------------
 	CryptoPP::GCM<CryptoPP::AES>::Encryption encryption;
 
-	CryptoPP::byte key[CryptoPP::AES::MAX_KEYLENGTH] = {0x00};
-	CryptoPP::byte iv[CryptoPP::AES::BLOCKSIZE] = {0x00};
+	CryptoPP::byte key[CryptoPP::AES::MAX_KEYLENGTH];
+	CryptoPP::byte iv[CryptoPP::AES::BLOCKSIZE];
 
-	CryptoPP::AutoSeededRandomPool prng;
-	prng.GenerateBlock(key, 32);
-	prng.GenerateBlock(iv, 16);
+	GenerateKeys::generateKeyAESGCM(key, iv);
 
 	encryption.SetKeyWithIV(key, sizeof(key), iv, sizeof(iv));
 
-	std::cout << "generated key length: " << sizeof(key) << " bytes" << std::endl;
-	std::cout << "generated IV length: " << sizeof(iv) << " bytes" << std::endl;
-
+	// send to all users but encrypt with their pub key first
 	std::string serializedKeyAndIv = Serialize::serializeKeyAndIV(key, sizeof(key), iv, sizeof(iv));
-	std::cout << "Serialized: " << serializedKeyAndIv << std::endl;
-
 	SSL_write(ssl, serializedKeyAndIv.data(), serializedKeyAndIv.size());
 
-	std::string pt = "some encrypted text";
-	std::string ciphertext = Encrypt::encryptDataAESGCM(pt, key, sizeof(key));
-	std::cout << "Cipher made: " << ciphertext << std::endl;
+	// std::string pt = "some encrypted text";
+	// std::string ciphertext = Encrypt::encryptDataAESGCM(pt, key, sizeof(key));
 
-	SSL_write(ssl, ciphertext.data(), ciphertext.size());
+	// SSL_write(ssl, ciphertext.data(), ciphertext.size());
 	// char msg[1024];
 	// while (1)
 	// {
@@ -70,10 +73,10 @@ int main()
 	SSLSetup::initOpenssl();
 
 	CreateDirectory makeKeysDir(keysDirectory);
-	GenerateKeys::generateCertAndPrivateKey(clientPrivateKeyPath, clientCertPath);
+	GenerateKeys::generateCertAndPrivateKey(clientPrivateKeyCertPath, clientCertPath);
 
 	SSL_CTX *ctx = SSLSetup::createCTX(TLS_client_method());
-	SSLSetup::configureCTX(ctx, clientCertPath, clientPrivateKeyPath);
+	SSLSetup::configureCTX(ctx, clientCertPath, clientPrivateKeyCertPath);
 
 	const std::string serverIpAddress = "127.0.0.1";
 	const int port = 49153;
@@ -94,7 +97,7 @@ int main()
 	SSL *ssl = SSL_new(ctx);
 	SSL_set_fd(ssl, socketfd);
 
-	SSL_connect(ssl) <= 0 ? ERR_print_errors_fp(stderr) : sendMessage(ssl);
+	SSL_connect(ssl) <= 0 ? ERR_print_errors_fp(stderr) : communicateWithServer(ssl);
 
 	SSL_shutdown(ssl);
 	SSL_free(ssl);

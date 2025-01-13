@@ -14,6 +14,7 @@
 #include <cryptopp/osrng.h>
 #include <cryptopp/base64.h>
 #include <cryptopp/hex.h>
+#include <vector>
 
 #define KEYSIZE 4096
 
@@ -149,6 +150,13 @@ public:
 		BIO_free_all(publicKeyBio);
 
 		EVP_PKEY_free(pkey);
+	}
+
+	static void generateKeyAESGCM(CryptoPP::byte *key, CryptoPP::byte *iv)
+	{
+		CryptoPP::AutoSeededRandomPool prng;
+		prng.GenerateBlock(key, 32);
+		prng.GenerateBlock(iv, 16);
 	}
 };
 
