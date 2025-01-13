@@ -206,23 +206,17 @@ public:
 
 	static bool receiveAllPublicKeys(SSL *ssl)
 	{
-		char buffer[4096];
-		int bytes;
-
-		if ((bytes = SSL_read(ssl, buffer, sizeof(buffer) - 1)) <= 0)
-		{
-			std::cerr << "Error: Failed to public key from client." << std::endl;
+		std::string amountOfKeys;
+		if ((amountOfKeys = receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
 			return false;
-		}
-		buffer[bytes] = '\0';
-		std::string amountOfKeys(buffer);
+
 		int amount = std::stoi(amountOfKeys);
 
-		for (int i = 0; i < amount; i++)
+		for (int i = 1; i < amount + 1; i++)
 		{
-			buffer[bytes] = '\0';
-			bytes = SSL_read(ssl, buffer, sizeof(buffer) - 1);
-			std::string publicKeyData(buffer);
+			std::string publicKeyData;
+			if ((publicKeyData = receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
+				return false;
 			SaveFile(fmt::format("client{}PublicKey.pem", i), publicKeyData, std::ios::binary);
 		}
 

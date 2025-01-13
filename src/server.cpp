@@ -13,22 +13,16 @@
 #include "../include/networking.hpp"
 #include "../include/config.hpp"
 #include "../include/encryption.hpp"
+#include "../include/server.hpp"
 
 std::function<void(int)> shutdownHandler;
 void signalHandle(int signal) { shutdownHandler(signal); }
 
 void handleClient(SSL *ssl)
 {
-	char buffer[4096];
-	int bytes;
-
-	if ((bytes = SSL_read(ssl, buffer, sizeof(buffer) - 1)) <= 0)
-	{
-		std::cerr << "Error: Failed to public key from client." << std::endl;
+	std::string publicKey;
+	if ((publicKey = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
 		return;
-	}
-	buffer[bytes] = '\0';
-	std::string publicKey(buffer);
 
 	Server::publicKeyData.push_back(publicKey);
 	Server::publicKeyData.push_back("dfds");
@@ -54,9 +48,7 @@ void handleClient(SSL *ssl)
 
 	std::string ciphertext;
 	if ((ciphertext = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
-	{
 		return;
-	}
 
 	std::cout << "Received ciphertext: " << ciphertext << std::endl;
 
@@ -97,12 +89,15 @@ int main()
 		SSL *ssl = SSL_new(ctx);
 		SSL_set_fd(ssl, clientSocket);
 
-		SSL_accept(ssl) <= 0 ? ERR_print_errors_fp(stderr) : handleClient(ssl);
+		if (SSL_accept(ssl) <= 0)
+		{
+			std::cout << "Error accepting client: ";
+			ERR_print_errors_fp(stderr);
+			Clean::cleanUpClient(ssl, clientSocket);
+		}
 
-		SSL_shutdown(ssl);
-		SSL_free(ssl);
-		close(clientSocket);
-		std::cout << "Cleaned up client" << std::endl;
+		std::thread(handleClient, ssl).join();
+		Clean::cleanUpClient(ssl, clientSocket);
 	}
 
 	close(serverSocket);
