@@ -7,6 +7,7 @@
 #include <fstream>
 #include <vector>
 #include <thread>
+#include <map>
 #include "../include/keys.hpp"
 #include "../include/ssl.hpp"
 #include "../include/file_handling.hpp"
@@ -18,6 +19,8 @@
 std::function<void(int)> shutdownHandler;
 void signalHandle(int signal) { shutdownHandler(signal); }
 
+std::map<std::string, SSL *> keyToSockets;
+
 void handleClient(SSL *ssl)
 {
 	std::string publicKey;
@@ -25,38 +28,60 @@ void handleClient(SSL *ssl)
 		return;
 
 	Server::publicKeyData.push_back(publicKey);
-	Server::publicKeyData.push_back("dfds");
-	Server::publicKeyData.push_back("gfdfi");
+	std::cout << "Public key: " << publicKey << std::endl;
+
+	keyToSockets[publicKey] = ssl; // add the key and map it to the socket
 
 	if (!Send::sendAllPublicKeys(ssl, Server::publicKeyData, publicKey))
 	{
 		// clean up client here
 	}
 
-	std::string serialized;
-	if ((serialized = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
+	std::string amountOfKeys;
+	if ((amountOfKeys = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
 		return;
 
-	std::cout << "Received serialized key and IV: " << serialized << std::endl;
+	for (int i = 0; i <= std::stoi(amountOfKeys); i++)
+	{
+		std::string keyData;
+		if ((keyData = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
+			return;
 
-	CryptoPP::GCM<CryptoPP::AES>::Encryption encryption;
-	CryptoPP::byte key[CryptoPP::AES::MAX_KEYLENGTH];
-	CryptoPP::byte iv[CryptoPP::AES::BLOCKSIZE];
+		std::string encryptedAesKey;
+		if ((encryptedAesKey = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
+			return;
 
-	Deserialize::deserializeKeyAndIV(serialized, key, sizeof(key), iv, sizeof(iv));
-	encryption.SetKeyWithIV(key, sizeof(key), iv, sizeof(iv));
+		if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(keyToSockets[keyData], encryptedAesKey.data(), encryptedAesKey.size()))
+			return;
+	}
 
-	std::string ciphertext;
-	if ((ciphertext = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
-		return;
+	// std::string encryptedAESKey;
+	// if ((encryptedAESKey = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
+	// 	return;
+	// std::string serialized;
+	// if ((serialized = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
+	// 	return;
 
-	std::cout << "Received ciphertext: " << ciphertext << std::endl;
+	// std::cout << "Received serialized key and IV: " << serialized << std::endl;
 
-	CryptoPP::byte ivDecoded[CryptoPP::AES::BLOCKSIZE];
-	Deserialize::deserializeIV(ciphertext, ivDecoded, sizeof(ivDecoded));
+	// CryptoPP::GCM<CryptoPP::AES>::Encryption encryption;
+	// CryptoPP::byte key[CryptoPP::AES::MAX_KEYLENGTH];
+	// CryptoPP::byte iv[CryptoPP::AES::BLOCKSIZE];
 
-	std::string decryptedMessage = Decrypt::decryptDataAESGCM(ciphertext, key, sizeof(key), ivDecoded, sizeof(ivDecoded));
-	std::cout << "Decrypted message: " << decryptedMessage << std::endl;
+	// Deserialize::deserializeKeyAndIV(serialized, key, sizeof(key), iv, sizeof(iv));
+	// encryption.SetKeyWithIV(key, sizeof(key), iv, sizeof(iv));
+
+	// std::string ciphertext;
+	// if ((ciphertext = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
+	// 	return;
+
+	// std::cout << "Received ciphertext: " << ciphertext << std::endl;
+
+	// CryptoPP::byte ivDecoded[CryptoPP::AES::BLOCKSIZE];
+	// Deserialize::deserializeIV(ciphertext, ivDecoded, sizeof(ivDecoded));
+
+	// std::string decryptedMessage = Decrypt::decryptDataAESGCM(ciphertext, key, sizeof(key), ivDecoded, sizeof(ivDecoded));
+	// std::cout << "Decrypted message: " << decryptedMessage << std::endl;
 }
 
 int main()

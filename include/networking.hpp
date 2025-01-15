@@ -7,6 +7,7 @@
 #include <netinet/in.h>
 #include <unistd.h>
 #include "file_handling.hpp"
+#include "encryption.hpp"
 
 #define WRAP_STRING_LITERAL(str) ([]() constexpr { return StringLiteral<sizeof(str)>(str); }())
 
@@ -165,20 +166,55 @@ public:
 
 	static bool sendAllPublicKeys(SSL *ssl, std::vector<std::string> &publicKeysVector, const std::string &userPublicKey)
 	{
+
 		std::string amountOfUsers = std::to_string(publicKeysVector.size() - 1); // -1 for the current user
+
 		if (!sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, amountOfUsers.c_str(), amountOfUsers.size()))
 			return false;
+
+		// send the amount of keys before sending vector so client can stop receiving
+		if (publicKeysVector.size() <= 1)
+		{
+			std::cout << fmt::format("Skipping sending all public keys, Only {} public key in vector", publicKeysVector.size()) << std::endl;
+			return true;
+		}
 
 		for (std::string i : publicKeysVector)
 		{
 			if (i != userPublicKey)
-			{
 				if (!sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, i.c_str(), i.size()))
 					return false;
-			}
 		};
 
 		std::cout << "Sent all public keys" << std::endl;
+		return true;
+	}
+
+	static bool sendEncryptedAESKey(SSL *ssl, int &amountOfKeys, std::string &aesKey)
+	{
+		if (amountOfKeys <= 0)
+			return true;
+
+		if (!sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, std::to_string(amountOfKeys).data(), std::to_string(amountOfKeys).size()))
+			return false;
+
+		for (int i = 1; i <= amountOfKeys + 1; i++)
+		{
+			std::string keyPath = fmt::format("../received_keys/client{}PublicKey.pem", i);
+			std::string keyContents = ReadFile::ReadPemKeyContents(keyPath);
+			EVP_PKEY *loadedPublicKey = LoadKey::loadRSAKey(keyPath);
+
+			std::string encryptedAesKey = Encrypt::encryptDataRSA(loadedPublicKey, aesKey);
+
+			if (!sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, keyContents.data(), keyContents.size()))
+				return false;
+
+			if (!sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, encryptedAesKey.data(), encryptedAesKey.size()))
+				return false;
+
+			EVP_PKEY_free(loadedPublicKey);
+		}
+
 		return true;
 	}
 };
@@ -204,20 +240,27 @@ public:
 		return std::string(buffer, bytesRead);
 	}
 
-	static bool receiveAllPublicKeys(SSL *ssl)
+	static bool receiveAllPublicKeys(SSL *ssl, int *keyAmount)
 	{
 		std::string amountOfKeys;
 		if ((amountOfKeys = receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
 			return false;
 
 		int amount = std::stoi(amountOfKeys);
+		*keyAmount = amount;
+
+		if (amount <= 0)
+		{
+			std::cout << "No client keys to receive" << std::endl;
+			return true;
+		}
 
 		for (int i = 1; i < amount + 1; i++)
 		{
 			std::string publicKeyData;
 			if ((publicKeyData = receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
 				return false;
-			SaveFile(fmt::format("client{}PublicKey.pem", i), publicKeyData, std::ios::binary);
+			SaveFile(fmt::format("../received_keys/client{}PublicKey.pem", i), publicKeyData, std::ios::binary);
 		}
 
 		return true;

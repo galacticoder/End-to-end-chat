@@ -24,7 +24,12 @@ void communicateWithServer(SSL *ssl)
 	const std::string publicKeyData = ReadFile::ReadPemKeyContents(clientPublicKeyPath);
 	SSL_write(ssl, publicKeyData.data(), publicKeyData.length());
 
-	Receive::receiveAllPublicKeys(ssl);
+	int amountOfKeys;
+
+	if (!Receive::receiveAllPublicKeys(ssl, &amountOfKeys))
+		return;
+
+	std::cout << "keys: " << amountOfKeys << std::endl;
 
 	//------------
 	CryptoPP::GCM<CryptoPP::AES>::Encryption encryption;
@@ -33,38 +38,25 @@ void communicateWithServer(SSL *ssl)
 	CryptoPP::byte iv[CryptoPP::AES::BLOCKSIZE];
 
 	GenerateKeys::generateKeyAESGCM(key, iv);
-
 	encryption.SetKeyWithIV(key, sizeof(key), iv, sizeof(iv));
 
 	// send to all users but encrypt with their pub key first
 	std::string serializedKeyAndIv = Serialize::serializeKeyAndIV(key, sizeof(key), iv, sizeof(iv));
-	SSL_write(ssl, serializedKeyAndIv.data(), serializedKeyAndIv.size());
 
-	// std::string pt = "some encrypted text";
-	// std::string ciphertext = Encrypt::encryptDataAESGCM(pt, key, sizeof(key));
+	if (!Send::sendEncryptedAESKey(ssl, amountOfKeys, serializedKeyAndIv))
+		return;
 
-	// SSL_write(ssl, ciphertext.data(), ciphertext.size());
-	// char msg[1024];
 	// while (1)
 	// {
-	// 	std::cout << "Enter message: ";
-	// 	std::cin.getline(msg, sizeof(msg));
+	// 	std::string message;
+	// 	std::getline(std::cin, message);
+	// 	std::string ciphertext = Encrypt::encryptDataAESGCM(message, key, sizeof(key));
 
-	// 	if (SSL_write(ssl, msg, strlen(msg)) <= 0)
+	// 	if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, ciphertext.data(), ciphertext.size()))
 	// 	{
-	// 		std::cerr << "Error sending message" << std::endl;
-	// 		break;
+	// 		std::cout << "Server shutdown" << std::endl;
+	// 		return;
 	// 	}
-
-	// 	int bytes = SSL_write(ssl, msg, sizeof(msg) - 1);
-	// 	if (bytes <= 0)
-	// 	{
-	// 		std::cerr << "Error receiving message" << std::endl;
-	// 		break;
-	// 	}
-
-	// 	msg[bytes] = '\0';
-	// 	std::cout << "Server response: " << msg << std::endl;
 	// }
 }
 
