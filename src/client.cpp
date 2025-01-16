@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <fstream>
+#include <thread>
 #include <vector>
 #include "../include/ssl.hpp"
 #include "../include/keys.hpp"
@@ -15,21 +16,72 @@
 std::function<void(int)> shutdownHandler;
 void signalHandle(int signal) { shutdownHandler(signal); }
 
+std::string base64Decode(const std::string &input)
+{
+	std::string decoded;
+	CryptoPP::StringSource(input, true, new CryptoPP::Base64Decoder(new CryptoPP::StringSink(decoded)));
+	return decoded;
+}
+
+void ReceiveMessages(SSL *ssl, CryptoPP::byte *key, size_t keySize, CryptoPP::byte *iv, size_t ivSize)
+{
+	while (true)
+	{
+		std::string message;
+
+		if ((message = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
+			return;
+
+		// SignalType anySignalReceive = SignalHandling::getSignalType(receivedMessage);
+		// SignalHandling::handleSignal(anySignalReceive, receivedMessage, ssl, receivedPublicKey);
+		// when it looks like a random exit its cuz it didnt receive a key properly so pause the other client from sending messages till after this guy receives the key
+
+		if (message.find("AESkey") != std::string::npos)
+		{
+			std::cout << "Aeskey new" << std::endl;
+			std::string aesKey = message.substr(0, message.find("AESkey") - 6);
+			// aesKey = base64Decode(aesKey);
+			// decyrpt with private key rsa
+			std::cout << "Here3" << std::endl;
+			Deserialize::deserializeKeyAndIV(aesKey, key, sizeof(key), iv, sizeof(iv));
+			std::cout << "Here4" << std::endl;
+		}
+		else
+		{
+			std::cout << "Here1" << std::endl;
+			Deserialize::deserializeIV(message, iv, sizeof(iv));
+			std::cout << "Here2" << std::endl;
+			std::cout << "Message: " << message << std::endl;
+			std::string decryptedMessage = Decrypt::decryptDataAESGCM(message, key, sizeof(key), iv, sizeof(iv));
+			std::cout << "Received message: " << decryptedMessage << std::endl;
+		}
+
+		// std::string decodedMessage = Decode::Base64Decode(receivedMessage);
+		// std::string decryptedMessage = Decrypt::DecryptData(privateKey, decodedMessage);
+
+		// std::string message = GetFormattedMessage(decryptedMessage, (messageType == 'C') ? clientInfo[2] : "");
+
+		// clientInfo.clear();
+		// messageType = '\0';
+		// printAndRefreshWindow(subwin, inputWindow, message);
+	}
+}
+
 void communicateWithServer(SSL *ssl)
 {
 	// send rsa key
 	GenerateKeys::generateRSAKeys(clientPrivateKeyPath, clientPublicKeyPath);
 	std::cout << "Made rsa keys" << std::endl;
 
-	const std::string publicKeyData = ReadFile::ReadPemKeyContents(clientPublicKeyPath);
-	SSL_write(ssl, publicKeyData.data(), publicKeyData.length());
+	// const std::string publicKeyData = ReadFile::ReadPemKeyContents(clientPublicKeyPath);
+	// SSL_write(ssl, publicKeyData.data(), publicKeyData.length());
 
-	int amountOfKeys;
+	// int amountOfKeys;
 
-	if (!Receive::receiveAllPublicKeys(ssl, &amountOfKeys))
-		return;
+	// if (!Receive::receiveAllPublicKeys(ssl, &amountOfKeys))
+	// 	return;
 
-	std::cout << "keys: " << amountOfKeys << std::endl;
+	// std::cout << "keys: " << amountOfKeys << std::endl;
 
 	//------------
 	CryptoPP::GCM<CryptoPP::AES>::Encryption encryption;
@@ -43,21 +95,23 @@ void communicateWithServer(SSL *ssl)
 	// send to all users but encrypt with their pub key first
 	std::string serializedKeyAndIv = Serialize::serializeKeyAndIV(key, sizeof(key), iv, sizeof(iv));
 
-	if (!Send::sendEncryptedAESKey(ssl, amountOfKeys, serializedKeyAndIv))
+	if (!Send::sendEncryptedAESKey(ssl, serializedKeyAndIv))
 		return;
 
-	// while (1)
-	// {
-	// 	std::string message;
-	// 	std::getline(std::cin, message);
-	// 	std::string ciphertext = Encrypt::encryptDataAESGCM(message, key, sizeof(key));
+	std::thread(ReceiveMessages, ssl, key, sizeof(key), iv, sizeof(iv)).detach();
 
-	// 	if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, ciphertext.data(), ciphertext.size()))
-	// 	{
-	// 		std::cout << "Server shutdown" << std::endl;
-	// 		return;
-	// 	}
-	// }
+	while (1)
+	{
+		std::string message;
+		std::getline(std::cin, message);
+		std::string ciphertext = Encrypt::encryptDataAESGCM(message, key, sizeof(key));
+
+		if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, ciphertext.data(), ciphertext.size()))
+		{
+			std::cout << "Server shutdown" << std::endl;
+			return;
+		}
+	}
 }
 
 int main()
@@ -71,7 +125,7 @@ int main()
 	SSLSetup::configureCTX(ctx, clientCertPath, clientPrivateKeyCertPath);
 
 	const std::string serverIpAddress = "127.0.0.1";
-	const int port = 49153;
+	const int port = 49152;
 
 	int socketfd = Networking::startClientSocket(port, serverIpAddress);
 

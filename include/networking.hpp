@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include "file_handling.hpp"
 #include "encryption.hpp"
+#include "config.hpp"
 
 #define WRAP_STRING_LITERAL(str) ([]() constexpr { return StringLiteral<sizeof(str)>(str); }())
 
@@ -138,7 +139,7 @@ struct StringLiteral
 	char value[N];
 };
 
-class Send
+class Send : public Encrypt
 {
 protected:
 	static void printSSLError(int sslError)
@@ -161,6 +162,20 @@ public:
 			return false;
 		}
 
+		return true;
+	}
+
+	static bool broadcastMessage(SSL *ssl, std::string &message)
+	{
+		std::cout << "In broadcast" << std::endl;
+		for (SSL *socket : Server::clientSSLSockets)
+		{
+			if (socket != ssl)
+			{
+				if (!sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(socket, message.data(), message.size()))
+					return false;
+			}
+		}
 		return true;
 	}
 
@@ -190,31 +205,35 @@ public:
 		return true;
 	}
 
-	static bool sendEncryptedAESKey(SSL *ssl, int &amountOfKeys, std::string &aesKey)
+	static bool sendEncryptedAESKey(SSL *ssl, std::string &aesKey)
 	{
-		if (amountOfKeys <= 0)
-			return true;
+		std::cout << "Sending encrypted aes key" << std::endl;
+		// if (!sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, std::to_string(amountOfKeys).data(), std::to_string(amountOfKeys).size()))
+		// 	return false;
 
-		if (!sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, std::to_string(amountOfKeys).data(), std::to_string(amountOfKeys).size()))
+		// if (amountOfKeys <= 0)
+		// 	return true;
+
+		aesKey.append("AESkey");
+		if (!sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, aesKey.data(), aesKey.size()))
 			return false;
 
-		for (int i = 1; i <= amountOfKeys + 1; i++)
-		{
-			std::string keyPath = fmt::format("../received_keys/client{}PublicKey.pem", i);
-			std::string keyContents = ReadFile::ReadPemKeyContents(keyPath);
-			EVP_PKEY *loadedPublicKey = LoadKey::loadRSAKey(keyPath);
+		// for (int i = 1; i <= amountOfKeys; i++)
+		// {
+		// 	std::string keyPath = fmt::format("../received_keys/client{}PublicKey.pem", i);
+		// 	std::string keyContents = ReadFile::ReadPemKeyContents(keyPath);
+		// EVP_PKEY *loadedPublicKey = LoadKey::LoadPublicKey(keyPath);
 
-			std::string encryptedAesKey = Encrypt::encryptDataRSA(loadedPublicKey, aesKey);
+		// std::string encryptedAesKey = Encrypt::base64Encode(Encrypt::encryptDataRSA(loadedPublicKey, aesKey)).append("AESkey");
+		// std::cout << "Encrypted aes key: " << encryptedAesKey << std::endl;
 
-			if (!sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, keyContents.data(), keyContents.size()))
-				return false;
+		// if (!sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, keyContents.data(), keyContents.size()))
+		// return false;
 
-			if (!sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, encryptedAesKey.data(), encryptedAesKey.size()))
-				return false;
+		// EVP_PKEY_free(loadedPublicKey);
+		// }
 
-			EVP_PKEY_free(loadedPublicKey);
-		}
-
+		std::cout << "Sent encrypted aes key to users" << std::endl;
 		return true;
 	}
 };
@@ -262,6 +281,40 @@ public:
 				return false;
 			SaveFile(fmt::format("../received_keys/client{}PublicKey.pem", i), publicKeyData, std::ios::binary);
 		}
+
+		return true;
+	}
+
+	static bool broadcastAESencryptedKey(SSL *ssl)
+	{
+		// std::string amountOfKeys;
+		// if ((amountOfKeys = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
+		// 	return false;
+
+		// if (std::stoi(amountOfKeys) <= 0)
+		// 	return true;
+
+		std::cout << "HEREE" << std::endl;
+
+		std::string encryptedAesKey;
+		if ((encryptedAesKey = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
+			return false;
+		std::cout << "HEREE" << std::endl;
+
+		if (!Send::broadcastMessage(ssl, encryptedAesKey))
+		{
+			return false;
+		}
+		std::cout << "HEREE" << std::endl;
+		// for (int i = 0; i <= std::stoi(amountOfKeys); i++)
+		// {
+		// std::string keyData;
+		// if ((keyData = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
+		// 	return false;
+
+		// if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(keyToSockets[keyData], encryptedAesKey.data(), encryptedAesKey.size()))
+		// return false;
+		// }
 
 		return true;
 	}

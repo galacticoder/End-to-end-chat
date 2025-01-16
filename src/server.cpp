@@ -23,36 +23,45 @@ std::map<std::string, SSL *> keyToSockets;
 
 void handleClient(SSL *ssl)
 {
-	std::string publicKey;
-	if ((publicKey = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
+	// std::string publicKey;
+	// if ((publicKey = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
+	// 	return;
+
+	// Server::publicKeyData.push_back(publicKey);
+	// std::cout << "Public key: " << publicKey << std::endl;
+	std::cout << "here" << std::endl;
+	Server::clientSSLSockets.push_back(ssl);
+	// keyToSockets[publicKey] = ssl; // add the key and map it to the socket
+
+	// if (!Send::sendAllPublicKeys(ssl, Server::publicKeyData, publicKey))
+	// {
+	// 	// clean up client here
+	// }
+
+	std::cout << "here" << std::endl;
+	std::string encryptedAesKey;
+
+	if ((encryptedAesKey = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
 		return;
+	std::cout << "HEREE" << std::endl;
 
-	Server::publicKeyData.push_back(publicKey);
-	std::cout << "Public key: " << publicKey << std::endl;
-
-	keyToSockets[publicKey] = ssl; // add the key and map it to the socket
-
-	if (!Send::sendAllPublicKeys(ssl, Server::publicKeyData, publicKey))
+	if (!Send::broadcastMessage(ssl, encryptedAesKey))
 	{
-		// clean up client here
+		return;
 	}
+	std::cout << "here" << std::endl;
 
-	std::string amountOfKeys;
-	if ((amountOfKeys = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
-		return;
-
-	for (int i = 0; i <= std::stoi(amountOfKeys); i++)
+	while (1)
 	{
-		std::string keyData;
-		if ((keyData = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
+		std::string message;
+		if ((message = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
 			return;
 
-		std::string encryptedAesKey;
-		if ((encryptedAesKey = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
+		std::cout << "Client message: " << message << std::endl;
+		if (!Send::broadcastMessage(ssl, message))
+		{
 			return;
-
-		if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(keyToSockets[keyData], encryptedAesKey.data(), encryptedAesKey.size()))
-			return;
+		}
 	}
 
 	// std::string encryptedAESKey;
@@ -121,8 +130,8 @@ int main()
 			Clean::cleanUpClient(ssl, clientSocket);
 		}
 
-		std::thread(handleClient, ssl).join();
-		Clean::cleanUpClient(ssl, clientSocket);
+		std::thread(handleClient, ssl).detach();
+		// Clean::cleanUpClient(ssl, clientSocket);
 	}
 
 	close(serverSocket);

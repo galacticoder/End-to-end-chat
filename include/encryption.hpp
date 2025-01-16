@@ -74,7 +74,7 @@ public:
 
 class Encrypt
 {
-private:
+protected:
 	static std::string base64Encode(const std::string &input)
 	{
 		std::string encoded;
@@ -147,7 +147,7 @@ public:
 
 class Decrypt
 {
-private:
+protected:
 	static std::string base64Decode(const std::string &input)
 	{
 		std::string decoded;

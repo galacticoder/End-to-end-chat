@@ -163,32 +163,53 @@ public:
 class LoadKey
 {
 public:
-	static EVP_PKEY *loadRSAKey(const std::string &keyFile)
+	static EVP_PKEY *LoadPrivateKey(const std::string &privateKeyFile, const bool echo = 1 /*Echo output or not. On by default. Off is 0 */)
 	{
-		BIO *bio = BIO_new_file(keyFile.c_str(), "r");
-
+		BIO *bio = BIO_new_file(privateKeyFile.c_str(), "r");
 		if (!bio)
 		{
-			std::cerr << "Error loading RSA key: ";
+			std::cerr << "Error loading private rsa key: ";
 			ERR_print_errors_fp(stderr);
 			return nullptr;
 		}
 
 		EVP_PKEY *pkey = PEM_read_bio_PrivateKey(bio, nullptr, nullptr, nullptr);
-
-		if (!pkey)
-			pkey = PEM_read_bio_PUBKEY(bio, nullptr, nullptr, nullptr);
-
 		BIO_free(bio);
 
 		if (!pkey)
 		{
-			std::cerr << "Cannot load unsupported key type" << std::endl;
+			std::cerr << "Error loading private rsa key: ";
 			ERR_print_errors_fp(stderr);
 			return nullptr;
 		}
 
-		std::cout << fmt::format("Loaded RSA key file ('{}') successfully", keyFile) << std::endl;
+		if (echo == 1)
+			std::cout << "Loaded RSA Private key file (" << privateKeyFile << ") successfully" << std::endl;
+
+		return pkey;
+	}
+
+	static EVP_PKEY *LoadPublicKey(const std::string &publicKeyFile, const bool echo = 1 /*Echo output or not. On by default. Off is 0 */)
+	{
+		BIO *bio = BIO_new_file(publicKeyFile.c_str(), "r");
+		if (!bio)
+		{
+			ERR_print_errors_fp(stderr);
+			std::cerr << fmt::format("Error loading public rsa key from path {}", publicKeyFile) << std::endl;
+			return nullptr;
+		}
+
+		EVP_PKEY *pkey = PEM_read_bio_PUBKEY(bio, nullptr, nullptr, nullptr);
+		BIO_free(bio);
+
+		if (!pkey)
+		{
+			std::cerr << fmt::format("Error loading public rsa key from path {}", publicKeyFile) << std::endl;
+			return nullptr;
+		}
+
+		if (echo != 0)
+			std::cout << "Loaded RSA Public key file (" << publicKeyFile << ") successfully" << std::endl;
 
 		return pkey;
 	}
