@@ -11,9 +11,16 @@
 #include <openssl/err.h>
 #include <openssl/pem.h>
 
-class Serialize
+class Encode
 {
 public:
+	static std::string base64Encode(const std::string &input)
+	{
+		std::string encoded;
+		CryptoPP::StringSource(input, true, new CryptoPP::Base64Encoder(new CryptoPP::StringSink(encoded), false));
+		return encoded;
+	}
+
 	static std::string serializeKeyAndIV(const CryptoPP::byte *key, size_t keySize, const CryptoPP::byte *iv, size_t ivSize)
 	{
 		std::string serializedKey, serializedIV;
@@ -41,9 +48,16 @@ public:
 	}
 };
 
-class Deserialize
+class Decode
 {
 public:
+	static std::string base64Decode(const std::string &input)
+	{
+		std::string decoded;
+		CryptoPP::StringSource(input, true, new CryptoPP::Base64Decoder(new CryptoPP::StringSink(decoded)));
+		return decoded;
+	}
+
 	static void deserializeKeyAndIV(const std::string &serializedData, CryptoPP::byte *key, size_t keySize, CryptoPP::byte *iv, size_t ivSize)
 	{
 		auto separatorPos = serializedData.find(':');
@@ -74,14 +88,6 @@ public:
 
 class Encrypt
 {
-protected:
-	static std::string base64Encode(const std::string &input)
-	{
-		std::string encoded;
-		CryptoPP::StringSource(input, true, new CryptoPP::Base64Encoder(new CryptoPP::StringSink(encoded), false));
-		return encoded;
-	}
-
 public:
 	static std::string encryptDataAESGCM(const std::string &data, const CryptoPP::byte *key, size_t keySize)
 	{
@@ -99,9 +105,9 @@ public:
 							   new CryptoPP::AuthenticatedEncryptionFilter(encryption,
 																		   new CryptoPP::StringSink(ciphertext)));
 
-		ciphertext = base64Encode(ciphertext);
+		ciphertext = Encode::base64Encode(ciphertext);
 
-		std::string serializedIv = Serialize::serializeIV(iv, sizeof(iv)) += ":";
+		std::string serializedIv = Encode::serializeIV(iv, sizeof(iv)) += ":";
 		ciphertext = serializedIv += ciphertext;
 
 		return ciphertext;
@@ -147,19 +153,11 @@ public:
 
 class Decrypt
 {
-protected:
-	static std::string base64Decode(const std::string &input)
-	{
-		std::string decoded;
-		CryptoPP::StringSource(input, true, new CryptoPP::Base64Decoder(new CryptoPP::StringSink(decoded)));
-		return decoded;
-	}
-
 public:
 	static std::string decryptDataAESGCM(const std::string &ciphertext, const CryptoPP::byte *key, size_t keySize, const CryptoPP::byte *iv, size_t ivSize)
 	{
 		std::string extractedCiphertext = ciphertext.substr(ciphertext.find(":") + 1);
-		extractedCiphertext = base64Decode(extractedCiphertext);
+		extractedCiphertext = Decode::base64Decode(extractedCiphertext);
 
 		CryptoPP::GCM<CryptoPP::AES>::Decryption decryption;
 		std::string recovered;
@@ -174,7 +172,7 @@ public:
 
 	static std::string decryptDataRSA(EVP_PKEY *privateKey, const std::string &encryptedData)
 	{
-		std::string ciphertext = base64Decode(encryptedData);
+		std::string ciphertext = Decode::base64Decode(encryptedData);
 
 		EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new(privateKey, nullptr);
 		if (!ctx)

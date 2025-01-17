@@ -205,33 +205,32 @@ public:
 		return true;
 	}
 
-	static bool sendEncryptedAESKey(SSL *ssl, std::string &aesKey)
+	static bool sendEncryptedAESKey(SSL *ssl, std::string &aesKey, int &amountOfKeys)
 	{
 		std::cout << "Sending encrypted aes key" << std::endl;
-		// if (!sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, std::to_string(amountOfKeys).data(), std::to_string(amountOfKeys).size()))
-		// 	return false;
-
-		// if (amountOfKeys <= 0)
-		// 	return true;
-
-		aesKey.append("AESkey");
-		if (!sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, aesKey.data(), aesKey.size()))
+		if (!sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, std::to_string(amountOfKeys).data(), std::to_string(amountOfKeys).size()))
 			return false;
 
-		// for (int i = 1; i <= amountOfKeys; i++)
-		// {
-		// 	std::string keyPath = fmt::format("../received_keys/client{}PublicKey.pem", i);
-		// 	std::string keyContents = ReadFile::ReadPemKeyContents(keyPath);
-		// EVP_PKEY *loadedPublicKey = LoadKey::LoadPublicKey(keyPath);
+		if (amountOfKeys <= 0)
+			return true;
 
-		// std::string encryptedAesKey = Encrypt::base64Encode(Encrypt::encryptDataRSA(loadedPublicKey, aesKey)).append("AESkey");
-		// std::cout << "Encrypted aes key: " << encryptedAesKey << std::endl;
+		std::cout << "Raw key: " << aesKey << std::endl;
 
-		// if (!sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, keyContents.data(), keyContents.size()))
-		// return false;
+		for (int i = 1; i <= amountOfKeys; i++)
+		{
+			std::string keyPath = fmt::format("../received_keys/client{}PublicKey.pem", i);
+			std::string keyContents = ReadFile::ReadPemKeyContents(keyPath);
+			EVP_PKEY *loadedPublicKey = LoadKey::LoadPublicKey(keyPath);
 
-		// EVP_PKEY_free(loadedPublicKey);
-		// }
+			std::string encryptedAesKey = (Encode::base64Encode(Encrypt::encryptDataRSA(loadedPublicKey, aesKey)).append("AESkey")).append(fmt::format(":{}", i - 1));
+
+			std::cout << "Encrypted aes key: " << encryptedAesKey << std::endl;
+
+			if (!sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, encryptedAesKey.data(), encryptedAesKey.size()))
+				return false;
+
+			EVP_PKEY_free(loadedPublicKey);
+		}
 
 		std::cout << "Sent encrypted aes key to users" << std::endl;
 		return true;

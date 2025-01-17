@@ -19,21 +19,17 @@ void signalHandle(int signal) { shutdownHandler(signal); }
 CryptoPP::byte key[CryptoPP::AES::MAX_KEYLENGTH];
 CryptoPP::byte iv[CryptoPP::AES::BLOCKSIZE];
 
-std::string base64Decode(const std::string &input)
-{
-	std::string decoded;
-	CryptoPP::StringSource(input, true, new CryptoPP::Base64Decoder(new CryptoPP::StringSink(decoded)));
-	return decoded;
-}
-
-void ReceiveMessages(SSL *ssl)
+void ReceiveMessages(SSL *ssl, const std::string privateKeyPath, CryptoPP::GCM<CryptoPP::AES>::Encryption &encryption)
 {
 	while (true)
 	{
 		std::string message;
 
 		if ((message = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
+		{
+			std::cout << "Server killed" << std::endl;
 			return;
+		}
 
 		// SignalType anySignalReceive = SignalHandling::getSignalType(receivedMessage);
 		// SignalHandling::handleSignal(anySignalReceive, receivedMessage, ssl, receivedPublicKey);
@@ -43,50 +39,53 @@ void ReceiveMessages(SSL *ssl)
 		{
 			std::cout << "Aeskey new" << std::endl;
 			std::string aesKey = message.substr(0, message.find("AESkey") - 6);
-			// aesKey = base64Decode(aesKey);
-			std::cout << "Extracted AES key size: " << aesKey.size() << std::endl;
-			std::cout << "Key size: " << sizeof(key) << ", IV size: " << sizeof(iv) << std::endl;
+			aesKey = Decode::base64Decode(aesKey);
+			EVP_PKEY *privateKey = LoadKey::LoadPrivateKey(privateKeyPath);
+			aesKey = Decrypt::decryptDataRSA(privateKey, aesKey);
 			// decyrpt with private key rsa
 			std::cout << "Here3" << std::endl;
-			Deserialize::deserializeKeyAndIV(aesKey, key, sizeof(key), iv, sizeof(iv));
+			Decode::deserializeKeyAndIV(aesKey, key, sizeof(key), iv, sizeof(iv));
+			encryption.SetKeyWithIV(key, sizeof(key), iv, sizeof(iv));
 			std::cout << "Here4" << std::endl;
 		}
 		else
 		{
 			std::cout << "Here1" << std::endl;
-			Deserialize::deserializeIV(message, iv, sizeof(iv));
+			Decode::deserializeIV(message, iv, sizeof(iv));
 			std::cout << "Here2" << std::endl;
 			std::cout << "Message: " << message << std::endl;
 			std::string decryptedMessage = Decrypt::decryptDataAESGCM(message, key, sizeof(key), iv, sizeof(iv));
 			std::cout << "Received message: " << decryptedMessage << std::endl;
 		}
-
-		// std::string decodedMessage = Decode::Base64Decode(receivedMessage);
-		// std::string decryptedMessage = Decrypt::DecryptData(privateKey, decodedMessage);
-
-		// std::string message = GetFormattedMessage(decryptedMessage, (messageType == 'C') ? clientInfo[2] : "");
-
-		// clientInfo.clear();
-		// messageType = '\0';
-		// printAndRefreshWindow(subwin, inputWindow, message);
 	}
 }
 
 void communicateWithServer(SSL *ssl)
 {
 	// send rsa key
-	GenerateKeys::generateRSAKeys(clientPrivateKeyPath, clientPublicKeyPath);
+	std::cout << "Enter username: ";
+	std::string username;
+	std::getline(std::cin, username);
+	std::string publicKey = keysDirectory + username + "PubKey.pem";
+	std::string privateKey = keysDirectory + username + "PrivateKey.pem";
+	GenerateKeys::generateRSAKeys(privateKey, publicKey);
 	std::cout << "Made rsa keys" << std::endl;
 
-	// const std::string publicKeyData = ReadFile::ReadPemKeyContents(clientPublicKeyPath);
+	const std::string publicKeyData = ReadFile::ReadPemKeyContents(publicKey);
+	// send pub key
+	if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, publicKeyData.data(), publicKeyData.size()))
+		return;
+
 	// SSL_write(ssl, publicKeyData.data(), publicKeyData.length());
 
-	// int amountOfKeys;
+	int amountOfKeys;
 
-	// if (!Receive::receiveAllPublicKeys(ssl, &amountOfKeys))
-	// 	return;
+	CreateDirectory("../received_keys");
 
-	// std::cout << "keys: " << amountOfKeys << std::endl;
+	if (!Receive::receiveAllPublicKeys(ssl, &amountOfKeys))
+		return;
+
+	std::cout << "keys: " << amountOfKeys << std::endl;
 
 	//------------
 	CryptoPP::GCM<CryptoPP::AES>::Encryption encryption;
@@ -95,12 +94,12 @@ void communicateWithServer(SSL *ssl)
 	encryption.SetKeyWithIV(key, sizeof(key), iv, sizeof(iv));
 
 	// send to all users but encrypt with their pub key first
-	std::string serializedKeyAndIv = Serialize::serializeKeyAndIV(key, sizeof(key), iv, sizeof(iv));
+	std::string serializedKeyAndIv = Encode::serializeKeyAndIV(key, sizeof(key), iv, sizeof(iv));
 
-	if (!Send::sendEncryptedAESKey(ssl, serializedKeyAndIv))
+	if (!Send::sendEncryptedAESKey(ssl, serializedKeyAndIv, amountOfKeys))
 		return;
 
-	std::thread(ReceiveMessages, ssl).detach();
+	std::thread(ReceiveMessages, ssl, privateKey, std::ref(encryption)).detach();
 
 	while (1)
 	{

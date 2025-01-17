@@ -23,33 +23,71 @@ std::map<std::string, SSL *> keyToSockets;
 
 void handleClient(SSL *ssl)
 {
-	// std::string publicKey;
-	// if ((publicKey = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
-	// 	return;
-
-	// Server::publicKeyData.push_back(publicKey);
-	// std::cout << "Public key: " << publicKey << std::endl;
-	std::cout << "here" << std::endl;
 	Server::clientSSLSockets.push_back(ssl);
+
+	std::string publicKey;
+	if ((publicKey = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
+		return;
+
+	Server::publicKeyData.push_back(publicKey);
+	std::cout << "Public key: " << publicKey << std::endl;
+	std::cout << "here" << std::endl;
 	// keyToSockets[publicKey] = ssl; // add the key and map it to the socket
 
-	// if (!Send::sendAllPublicKeys(ssl, Server::publicKeyData, publicKey))
-	// {
-	// 	// clean up client here
-	// }
-
-	std::cout << "here" << std::endl;
-	std::string encryptedAesKey;
-
-	if ((encryptedAesKey = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
-		return;
-	std::cout << "HEREE" << std::endl;
-
-	if (!Send::broadcastMessage(ssl, encryptedAesKey))
+	if (!Send::sendAllPublicKeys(ssl, Server::publicKeyData, publicKey))
 	{
-		return;
+		// clean up client here
 	}
+
 	std::cout << "here" << std::endl;
+	// std::string encryptedAesKey;
+
+	// if ((encryptedAesKey = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
+	// 	return;
+	// std::cout << "HEREE" << std::endl;
+
+	// if (!Send::broadcastMessage(ssl, encryptedAesKey))
+	// {
+	// 	return;
+	// }
+	std::cout << "here" << std::endl;
+
+	//-------------
+	std::string amountOfUsers;
+	if ((amountOfUsers = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
+		return;
+
+	std::cout << "here now" << std::endl;
+	std::cout << "userrs: " << std::stoi(amountOfUsers) << std::endl;
+
+	if (std::stoi(amountOfUsers) > 0)
+	{
+		std::cout << "inside here" << std::endl;
+		for (int i = 0; i < std::stoi(amountOfUsers); i++)
+		{
+			std::string publicData;
+			if ((publicData = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
+				return;
+
+			std::cout << "Public key data: " << publicData << std::endl;
+
+			std::string delimeter = ":";
+			std::string extractIndex = publicData.substr(publicData.find(delimeter) + 1);
+			std::cout << "string extracted index: " << extractIndex << std::endl;
+			int extractedIndex = stoi(extractIndex);
+			std::cout << "Extracted index: " << extractedIndex << std::endl;
+			std::string encryptedKey = publicData.substr(0, publicData.find(delimeter));
+
+			std::cout << "Key is: " << encryptedKey << std::endl;
+
+			if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(Server::clientSSLSockets[extractedIndex], encryptedKey.data(), encryptedKey.size()))
+			{
+				return;
+			}
+			std::cout << "Sent aes key" << std::endl;
+		}
+		std::cout << "Sent all aes keys" << std::endl;
+	}
 
 	while (1)
 	{
@@ -63,34 +101,6 @@ void handleClient(SSL *ssl)
 			return;
 		}
 	}
-
-	// std::string encryptedAESKey;
-	// if ((encryptedAESKey = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
-	// 	return;
-	// std::string serialized;
-	// if ((serialized = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
-	// 	return;
-
-	// std::cout << "Received serialized key and IV: " << serialized << std::endl;
-
-	// CryptoPP::GCM<CryptoPP::AES>::Encryption encryption;
-	// CryptoPP::byte key[CryptoPP::AES::MAX_KEYLENGTH];
-	// CryptoPP::byte iv[CryptoPP::AES::BLOCKSIZE];
-
-	// Deserialize::deserializeKeyAndIV(serialized, key, sizeof(key), iv, sizeof(iv));
-	// encryption.SetKeyWithIV(key, sizeof(key), iv, sizeof(iv));
-
-	// std::string ciphertext;
-	// if ((ciphertext = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
-	// 	return;
-
-	// std::cout << "Received ciphertext: " << ciphertext << std::endl;
-
-	// CryptoPP::byte ivDecoded[CryptoPP::AES::BLOCKSIZE];
-	// Deserialize::deserializeIV(ciphertext, ivDecoded, sizeof(ivDecoded));
-
-	// std::string decryptedMessage = Decrypt::decryptDataAESGCM(ciphertext, key, sizeof(key), ivDecoded, sizeof(ivDecoded));
-	// std::cout << "Decrypted message: " << decryptedMessage << std::endl;
 }
 
 int main()
