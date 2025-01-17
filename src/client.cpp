@@ -16,6 +16,9 @@
 std::function<void(int)> shutdownHandler;
 void signalHandle(int signal) { shutdownHandler(signal); }
 
+CryptoPP::byte key[CryptoPP::AES::MAX_KEYLENGTH];
+CryptoPP::byte iv[CryptoPP::AES::BLOCKSIZE];
+
 std::string base64Decode(const std::string &input)
 {
 	std::string decoded;
@@ -23,7 +26,7 @@ std::string base64Decode(const std::string &input)
 	return decoded;
 }
 
-void ReceiveMessages(SSL *ssl, CryptoPP::byte *key, size_t keySize, CryptoPP::byte *iv, size_t ivSize)
+void ReceiveMessages(SSL *ssl)
 {
 	while (true)
 	{
@@ -41,6 +44,8 @@ void ReceiveMessages(SSL *ssl, CryptoPP::byte *key, size_t keySize, CryptoPP::by
 			std::cout << "Aeskey new" << std::endl;
 			std::string aesKey = message.substr(0, message.find("AESkey") - 6);
 			// aesKey = base64Decode(aesKey);
+			std::cout << "Extracted AES key size: " << aesKey.size() << std::endl;
+			std::cout << "Key size: " << sizeof(key) << ", IV size: " << sizeof(iv) << std::endl;
 			// decyrpt with private key rsa
 			std::cout << "Here3" << std::endl;
 			Deserialize::deserializeKeyAndIV(aesKey, key, sizeof(key), iv, sizeof(iv));
@@ -86,9 +91,6 @@ void communicateWithServer(SSL *ssl)
 	//------------
 	CryptoPP::GCM<CryptoPP::AES>::Encryption encryption;
 
-	CryptoPP::byte key[CryptoPP::AES::MAX_KEYLENGTH];
-	CryptoPP::byte iv[CryptoPP::AES::BLOCKSIZE];
-
 	GenerateKeys::generateKeyAESGCM(key, iv);
 	encryption.SetKeyWithIV(key, sizeof(key), iv, sizeof(iv));
 
@@ -98,7 +100,7 @@ void communicateWithServer(SSL *ssl)
 	if (!Send::sendEncryptedAESKey(ssl, serializedKeyAndIv))
 		return;
 
-	std::thread(ReceiveMessages, ssl, key, sizeof(key), iv, sizeof(iv)).detach();
+	std::thread(ReceiveMessages, ssl).detach();
 
 	while (1)
 	{
@@ -125,7 +127,7 @@ int main()
 	SSLSetup::configureCTX(ctx, clientCertPath, clientPrivateKeyCertPath);
 
 	const std::string serverIpAddress = "127.0.0.1";
-	const int port = 49152;
+	const int port = 8080;
 
 	int socketfd = Networking::startClientSocket(port, serverIpAddress);
 
