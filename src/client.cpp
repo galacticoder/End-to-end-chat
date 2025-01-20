@@ -16,8 +16,8 @@
 std::function<void(int)> shutdownHandler;
 void signalHandle(int signal) { shutdownHandler(signal); }
 
-CryptoPP::byte key[CryptoPP::AES::MAX_KEYLENGTH];
-CryptoPP::byte iv[CryptoPP::AES::BLOCKSIZE];
+CryptoPP::byte key[CryptoPP::AES::MAX_KEYLENGTH]; // 32 bytes
+CryptoPP::byte iv[CryptoPP::AES::BLOCKSIZE];	  // 16 bytes
 
 void ReceiveMessages(SSL *ssl, const std::string privateKeyPath, CryptoPP::GCM<CryptoPP::AES>::Encryption &encryption)
 {
@@ -37,14 +37,16 @@ void ReceiveMessages(SSL *ssl, const std::string privateKeyPath, CryptoPP::GCM<C
 
 		if (message.find("AESkey") != std::string::npos)
 		{
-			std::cout << "Aeskey new" << std::endl;
-			std::string aesKey = message.substr(0, message.find("AESkey") - 6);
-			aesKey = Decode::base64Decode(aesKey);
+			message = message.substr(0, message.find("AESkey"));
+			std::cout << "Aeskey new: " << message << std::endl;
+			message = Decode::base64Decode(message);
+			std::cout << "Aeskey new: " << message << std::endl;
 			EVP_PKEY *privateKey = LoadKey::LoadPrivateKey(privateKeyPath);
-			aesKey = Decrypt::decryptDataRSA(privateKey, aesKey);
+			message = Decrypt::decryptDataRSA(privateKey, message);
+			std::cout << "Aeskey new: " << message << std::endl;
 			// decyrpt with private key rsa
 			std::cout << "Here3" << std::endl;
-			Decode::deserializeKeyAndIV(aesKey, key, sizeof(key), iv, sizeof(iv));
+			Decode::deserializeKeyAndIV(message, key, sizeof(key), iv, sizeof(iv));
 			encryption.SetKeyWithIV(key, sizeof(key), iv, sizeof(iv));
 			std::cout << "Here4" << std::endl;
 		}

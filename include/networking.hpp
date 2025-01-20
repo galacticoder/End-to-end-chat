@@ -222,7 +222,7 @@ public:
 			std::string keyContents = ReadFile::ReadPemKeyContents(keyPath);
 			EVP_PKEY *loadedPublicKey = LoadKey::LoadPublicKey(keyPath);
 
-			std::string encryptedAesKey = (Encode::base64Encode(Encrypt::encryptDataRSA(loadedPublicKey, aesKey)).append("AESkey")).append(fmt::format(":{}", i - 1));
+			std::string encryptedAesKey = (Encode::base64Encode(Encrypt::encryptDataRSA(loadedPublicKey, aesKey))).append("AESkey").append(fmt::format(":{}", i - 1));
 
 			std::cout << "Encrypted aes key: " << encryptedAesKey << std::endl;
 
@@ -280,40 +280,6 @@ public:
 				return false;
 			SaveFile(fmt::format("../received_keys/client{}PublicKey.pem", i), publicKeyData, std::ios::binary);
 		}
-
-		return true;
-	}
-
-	static bool broadcastAESencryptedKey(SSL *ssl)
-	{
-		// std::string amountOfKeys;
-		// if ((amountOfKeys = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
-		// 	return false;
-
-		// if (std::stoi(amountOfKeys) <= 0)
-		// 	return true;
-
-		std::cout << "HEREE" << std::endl;
-
-		std::string encryptedAesKey;
-		if ((encryptedAesKey = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
-			return false;
-		std::cout << "HEREE" << std::endl;
-
-		if (!Send::broadcastMessage(ssl, encryptedAesKey))
-		{
-			return false;
-		}
-		std::cout << "HEREE" << std::endl;
-		// for (int i = 0; i <= std::stoi(amountOfKeys); i++)
-		// {
-		// std::string keyData;
-		// if ((keyData = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
-		// 	return false;
-
-		// if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(keyToSockets[keyData], encryptedAesKey.data(), encryptedAesKey.size()))
-		// return false;
-		// }
 
 		return true;
 	}

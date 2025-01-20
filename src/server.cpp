@@ -76,14 +76,13 @@ void handleClient(SSL *ssl)
 			std::cout << "string extracted index: " << extractIndex << std::endl;
 			int extractedIndex = stoi(extractIndex);
 			std::cout << "Extracted index: " << extractedIndex << std::endl;
-			std::string encryptedKey = publicData.substr(0, publicData.find(delimeter));
+			std::string encryptedKey = publicData.substr(0, publicData.find(delimeter)); // KEYDATAHEREAESKEY
 
 			std::cout << "Key is: " << encryptedKey << std::endl;
 
-			if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(Server::clientSSLSockets[extractedIndex], encryptedKey.data(), encryptedKey.size()))
-			{
+			if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(Server::clientSSLSockets[extractedIndex], publicData.data(), publicData.size()))
 				return;
-			}
+
 			std::cout << "Sent aes key" << std::endl;
 		}
 		std::cout << "Sent all aes keys" << std::endl;

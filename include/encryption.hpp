@@ -172,8 +172,6 @@ public:
 
 	static std::string decryptDataRSA(EVP_PKEY *privateKey, const std::string &encryptedData)
 	{
-		std::string ciphertext = Decode::base64Decode(encryptedData);
-
 		EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new(privateKey, nullptr);
 		if (!ctx)
 		{
@@ -189,7 +187,7 @@ public:
 		}
 
 		size_t out_len;
-		if (EVP_PKEY_decrypt(ctx, nullptr, &out_len, reinterpret_cast<const unsigned char *>(ciphertext.c_str()), ciphertext.size()) <= 0)
+		if (EVP_PKEY_decrypt(ctx, nullptr, &out_len, reinterpret_cast<const unsigned char *>(encryptedData.c_str()), encryptedData.size()) <= 0)
 		{
 			ERR_print_errors_fp(stderr);
 			EVP_PKEY_CTX_free(ctx);
@@ -197,7 +195,7 @@ public:
 		}
 
 		std::string out(out_len, '\0');
-		if (EVP_PKEY_decrypt(ctx, reinterpret_cast<unsigned char *>(&out[0]), &out_len, reinterpret_cast<const unsigned char *>(ciphertext.c_str()), ciphertext.size()) <= 0)
+		if (EVP_PKEY_decrypt(ctx, reinterpret_cast<unsigned char *>(&out[0]), &out_len, reinterpret_cast<const unsigned char *>(encryptedData.c_str()), encryptedData.size()) <= 0)
 		{
 			ERR_print_errors_fp(stderr);
 			EVP_PKEY_CTX_free(ctx);
