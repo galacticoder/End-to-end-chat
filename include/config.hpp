@@ -4,7 +4,7 @@
 #include <vector>
 #include <openssl/ssl.h>
 
-class Server
+class ServerStorage
 {
 public:
 	static const int SERVER_USER_LIMIT = 2;

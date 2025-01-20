@@ -12,6 +12,7 @@
 #include "../include/file_handling.hpp"
 #include "../include/networking.hpp"
 #include "../include/encryption.hpp"
+#include "../include/send_receive.hpp"
 
 std::function<void(int)> shutdownHandler;
 void signalHandle(int signal) { shutdownHandler(signal); }
@@ -38,17 +39,11 @@ void ReceiveMessages(SSL *ssl, const std::string privateKeyPath, CryptoPP::GCM<C
 		if (message.find("AESkey") != std::string::npos)
 		{
 			message = message.substr(0, message.find("AESkey"));
-			std::cout << "Aeskey new: " << message << std::endl;
 			message = Decode::base64Decode(message);
-			std::cout << "Aeskey new: " << message << std::endl;
 			EVP_PKEY *privateKey = LoadKey::LoadPrivateKey(privateKeyPath);
 			message = Decrypt::decryptDataRSA(privateKey, message);
-			std::cout << "Aeskey new: " << message << std::endl;
-			// decyrpt with private key rsa
-			std::cout << "Here3" << std::endl;
 			Decode::deserializeKeyAndIV(message, key, sizeof(key), iv, sizeof(iv));
 			encryption.SetKeyWithIV(key, sizeof(key), iv, sizeof(iv));
-			std::cout << "Here4" << std::endl;
 		}
 		else
 		{
@@ -81,24 +76,19 @@ void communicateWithServer(SSL *ssl)
 	// SSL_write(ssl, publicKeyData.data(), publicKeyData.length());
 
 	int amountOfKeys;
-
 	CreateDirectory("../received_keys");
 
-	if (!Receive::receiveAllPublicKeys(ssl, &amountOfKeys))
+	if (!Receive::Client::receiveAllPublicKeys(ssl, &amountOfKeys))
 		return;
 
-	std::cout << "keys: " << amountOfKeys << std::endl;
-
-	//------------
 	CryptoPP::GCM<CryptoPP::AES>::Encryption encryption;
 
 	GenerateKeys::generateKeyAESGCM(key, iv);
 	encryption.SetKeyWithIV(key, sizeof(key), iv, sizeof(iv));
 
-	// send to all users but encrypt with their pub key first
 	std::string serializedKeyAndIv = Encode::serializeKeyAndIV(key, sizeof(key), iv, sizeof(iv));
 
-	if (!Send::sendEncryptedAESKey(ssl, serializedKeyAndIv, amountOfKeys))
+	if (!Send::Client::sendEncryptedAESKey(ssl, serializedKeyAndIv, amountOfKeys))
 		return;
 
 	std::thread(ReceiveMessages, ssl, privateKey, std::ref(encryption)).detach();
@@ -111,7 +101,6 @@ void communicateWithServer(SSL *ssl)
 
 		if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, ciphertext.data(), ciphertext.size()))
 		{
-			std::cout << "Server shutdown" << std::endl;
 			return;
 		}
 	}

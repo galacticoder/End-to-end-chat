@@ -15,77 +15,30 @@
 #include "../include/config.hpp"
 #include "../include/encryption.hpp"
 #include "../include/server.hpp"
+#include "../include/send_receive.hpp"
 
 std::function<void(int)> shutdownHandler;
 void signalHandle(int signal) { shutdownHandler(signal); }
 
-std::map<std::string, SSL *> keyToSockets;
-
 void handleClient(SSL *ssl)
 {
-	Server::clientSSLSockets.push_back(ssl);
+	ServerStorage::clientSSLSockets.push_back(ssl);
 
 	std::string publicKey;
 	if ((publicKey = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
 		return;
 
-	Server::publicKeyData.push_back(publicKey);
+	ServerStorage::publicKeyData.push_back(publicKey);
 	std::cout << "Public key: " << publicKey << std::endl;
-	std::cout << "here" << std::endl;
-	// keyToSockets[publicKey] = ssl; // add the key and map it to the socket
 
-	if (!Send::sendAllPublicKeys(ssl, Server::publicKeyData, publicKey))
+	if (!Send::Server::sendAllPublicKeys(ssl, ServerStorage::publicKeyData, publicKey))
 	{
 		// clean up client here
 	}
 
-	std::cout << "here" << std::endl;
-	// std::string encryptedAesKey;
-
-	// if ((encryptedAesKey = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
-	// 	return;
-	// std::cout << "HEREE" << std::endl;
-
-	// if (!Send::broadcastMessage(ssl, encryptedAesKey))
-	// {
-	// 	return;
-	// }
-	std::cout << "here" << std::endl;
-
-	//-------------
-	std::string amountOfUsers;
-	if ((amountOfUsers = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
-		return;
-
-	std::cout << "here now" << std::endl;
-	std::cout << "userrs: " << std::stoi(amountOfUsers) << std::endl;
-
-	if (std::stoi(amountOfUsers) > 0)
+	if (!Receive::Server::receiveAndSendEncryptedAesKey(ssl))
 	{
-		std::cout << "inside here" << std::endl;
-		for (int i = 0; i < std::stoi(amountOfUsers); i++)
-		{
-			std::string publicData;
-			if ((publicData = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
-				return;
-
-			std::cout << "Public key data: " << publicData << std::endl;
-
-			std::string delimeter = ":";
-			std::string extractIndex = publicData.substr(publicData.find(delimeter) + 1);
-			std::cout << "string extracted index: " << extractIndex << std::endl;
-			int extractedIndex = stoi(extractIndex);
-			std::cout << "Extracted index: " << extractedIndex << std::endl;
-			std::string encryptedKey = publicData.substr(0, publicData.find(delimeter)); // KEYDATAHEREAESKEY
-
-			std::cout << "Key is: " << encryptedKey << std::endl;
-
-			if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(Server::clientSSLSockets[extractedIndex], publicData.data(), publicData.size()))
-				return;
-
-			std::cout << "Sent aes key" << std::endl;
-		}
-		std::cout << "Sent all aes keys" << std::endl;
+		// clean up client
 	}
 
 	while (1)
@@ -95,7 +48,7 @@ void handleClient(SSL *ssl)
 			return;
 
 		std::cout << "Client message: " << message << std::endl;
-		if (!Send::broadcastMessage(ssl, message))
+		if (!Send::Server::broadcastMessage(ssl, message))
 		{
 			return;
 		}
