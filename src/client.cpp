@@ -47,10 +47,8 @@ void ReceiveMessages(SSL *ssl, const std::string privateKeyPath, CryptoPP::GCM<C
 		}
 		else
 		{
-			std::cout << "Here1" << std::endl;
 			Decode::deserializeIV(message, iv, sizeof(iv));
-			std::cout << "Here2" << std::endl;
-			std::cout << "Message: " << message << std::endl;
+			// std::cout << "Message: " << message << std::endl;
 			std::string decryptedMessage = Decrypt::decryptDataAESGCM(message, key, sizeof(key), iv, sizeof(iv));
 			std::cout << "Received message: " << decryptedMessage << std::endl;
 		}
