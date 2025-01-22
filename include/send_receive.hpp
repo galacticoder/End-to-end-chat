@@ -1,6 +1,7 @@
 #pragma once
 
 #include <iostream>
+#include "signals.hpp"
 #include "encryption.hpp"
 #include "file_handling.hpp"
 #include "keys.hpp"
@@ -99,9 +100,10 @@ public:
 				return false;
 
 			if (amountOfKeys <= 0)
+			{
+				std::cout << "No other users to send key to." << std::endl;
 				return true;
-
-			std::cout << "Raw key: " << aesKey << std::endl;
+			}
 
 			for (int i = 1; i <= amountOfKeys; i++)
 			{
@@ -109,9 +111,10 @@ public:
 				std::string keyContents = ReadFile::ReadPemKeyContents(keyPath);
 				EVP_PKEY *loadedPublicKey = LoadKey::LoadPublicKey(keyPath);
 
-				std::string encryptedAesKey = (Encode::base64Encode(Encrypt::encryptDataRSA(loadedPublicKey, aesKey))).append("AESkey").append(fmt::format(":{}", i - 1));
+				std::string encryptedAesKey = (Encode::base64Encode(Encrypt::encryptDataRSA(loadedPublicKey, aesKey)));
 
-				std::cout << "Encrypted aes key: " << encryptedAesKey << std::endl;
+				encryptedAesKey.append(Signals::SignalManager::getSignalAsString(Signals::SignalType::NEWAESKEY));
+				encryptedAesKey.append(fmt::format(":{}", i - 1));
 
 				if (!sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, encryptedAesKey.data(), encryptedAesKey.size()))
 					return false;
@@ -193,13 +196,14 @@ public:
 					if ((encryptedAesKey = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
 						return false;
 
-					std::cout << "Public key data: " << encryptedAesKey << std::endl;
+					std::cout << "Encrypted Aes key data: " << encryptedAesKey << std::endl;
 
 					int extractedIndex = stoi(encryptedAesKey.substr(encryptedAesKey.find(":") + 1));
+					std::string encryptedKey = encryptedAesKey.substr(0, encryptedAesKey.find(":"));
 
 					std::cout << fmt::format("Sending aes key to client SSL socket index: {}", extractedIndex) << std::endl;
 
-					if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ServerStorage::clientSSLSockets[extractedIndex], encryptedAesKey.data(), encryptedAesKey.size()))
+					if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ServerStorage::clientSSLSockets[extractedIndex], encryptedKey.data(), encryptedKey.size()))
 						return false;
 
 					std::cout << fmt::format("Sent aes key to client SSL socket index: {}", extractedIndex) << std::endl;

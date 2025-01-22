@@ -5,8 +5,8 @@
 #include <csignal>
 #include <algorithm>
 #include <fmt/core.h>
-#include "send_receive.hpp"
 #include "encryption.hpp"
+#include "keys.hpp"
 
 namespace Signals
 {
@@ -24,6 +24,7 @@ namespace Signals
 		INVALIDNAME,
 		INVALIDNAMELENGTH,
 		BLACKLISTED,
+		NEWAESKEY,
 		UNKNOWN
 	};
 
@@ -33,7 +34,7 @@ namespace Signals
 		static inline std::vector<size_t> signalStringSizes;
 
 		static inline std::vector<std::string> signalStringsVector = {
-			"KEYLOADERROR", "KEYEXISTERR", "CORRECTPASSWORD", "INCORRECTPASSWORD", "NAMEEXISTSERR", "RATELIMITED", "USERLIMITREACHED", "PASSWORDNEEDED", "PASSWORDNOTNEEDED", "INVALIDNAMECHARS", "INVALIDNAMELENGTH", "BLACKLISTED"};
+			"KEYLOADERROR", "KEYEXISTERR", "CORRECTPASSWORD", "INCORRECTPASSWORD", "NAMEEXISTSERR", "RATELIMITED", "USERLIMITREACHED", "PASSWORDNEEDED", "PASSWORDNOTNEEDED", "INVALIDNAMECHARS", "INVALIDNAMELENGTH", "BLACKLISTED", "NEWAESKEY"};
 
 		static inline std::vector<std::string> serverMessages = {
 			"Public key could not be loaded on the server.",
@@ -47,18 +48,18 @@ namespace Signals
 			"Welcome to the server.",
 			"Username contains invalid characters.",
 			"", // invalid name length is set later
-			"You are blacklisted from the server."};
+			"You are blacklisted from the server.",
+			""}; // no message for aeskey}
 
 	public:
 		SignalManager()
 		{
-			for (size_t i = 0; i < signalStringsVector.size(); i++)
-				signalStringSizes.push_back((signalStringsVector[i]).length());
-
-			std::cout << fmt::format("signalStringSize vector filled with sizes of strings. vector size: {}", signalStringSizes.size()) << std::endl;
+			if (!signalStringSizes.empty())
+				for (size_t i = 0; i < signalStringsVector.size(); i++)
+					signalStringSizes.push_back((signalStringsVector[i]).length());
 		}
 
-		static std::string getPreloadedMessage(SignalType signalType)
+		static std::string getSignalMessage(SignalType signalType)
 		{
 			size_t index = static_cast<size_t>(signalType);
 
@@ -94,18 +95,69 @@ namespace Signals
 	};
 }
 
+#include "send_receive.hpp"
+
 class HandleSignal : private Signals::SignalManager
 {
 private:
-	static std::string printSignalMessage(Signals::SignalType signalType, const std::string &message)
+	static inline std::string serverPublicKeyPath = "../received_keys/serverPublicKey.pem";
+
+	static void printSignalMessage(Signals::SignalType signalType, const std::string &message)
 	{
 		std::cout << Decode::base64Decode(message.substr(0, message.size() - signalStringSizes[static_cast<size_t>(signalType)])) << std::endl;
 	};
 
-	static inline std::string serverPublicKeyPath = "../received_keys/serverPublicKey.pem";
+	static void setNewAesKey(std::string &message, const std::string &privateKeyPath, CryptoPP::GCM<CryptoPP::AES>::Encryption &encryption, CryptoPP::byte *key, size_t &keySize, CryptoPP::byte *iv, size_t &ivSize)
+	{
+		message = message.substr(0, message.size() - Signals::SignalManager::getSignalAsString(Signals::SignalType::NEWAESKEY).size());
+		message = Decode::base64Decode(message);
+
+		EVP_PKEY *privateKey = LoadKey::LoadPrivateKey(privateKeyPath);
+		message = Decrypt::decryptDataRSA(privateKey, message);
+
+		Decode::deserializeKeyAndIV(message, key, keySize, iv, ivSize);
+		encryption.SetKeyWithIV(key, keySize, iv, ivSize);
+
+		std::cout << "New key has been set" << std::endl;
+	}
+
+	// static bool enterServerPassword(SSL *ssl, const std::string &message)
+	// {
+	// 	EVP_PKEY *serverPublicKey = LoadKey::LoadPublicKey(serverPublicKeyPath);
+
+	// 	if (!serverPublicKey)
+	// 	{
+	// 		std::cout << "Cannot load server's public key. Exiting." << std::endl;
+	// 		raise(SIGINT);
+	// 	}
+
+	// 	std::string password;
+	// 	std::getline(std::cin, password);
+
+	// 	std::string encryptedPassword = Encode::base64Encode(Encrypt::encryptDataRSA(serverPublicKey, password));
+
+	// 	EVP_PKEY_free(serverPublicKey);
+
+	// 	if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, encryptedPassword.c_str(), encryptedPassword.size()))
+	// 		raise(SIGINT);
+
+	// 	std::cout << "Verifying password.." << std::endl;
+
+	// 	std::string passwordVerification;
+
+	// 	if ((passwordVerification = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
+	// 		raise(SIGINT);
+
+	// 	printSignalMessage(Signals::SignalManager::getSignalTypeFromMessage(passwordVerification), message);
+
+	// 	if (Signals::SignalManager::getSignalTypeFromMessage(passwordVerification) != Signals::SignalType::CORRECTPASSWORD)
+	// 		raise(SIGINT);
+
+	// 	return true;
+	// };
 
 public:
-	HandleSignal(Signals::SignalType signalType, const std::string &message, SSL *ssl)
+	HandleSignal(Signals::SignalType signalType, std::string &message, const std::string &privateKeyPath, CryptoPP::GCM<CryptoPP::AES>::Encryption &encryption, CryptoPP::byte *key, size_t keySize, CryptoPP::byte *iv, size_t ivSize)
 	{
 
 		if (signalType == Signals::SignalType::UNKNOWN)
@@ -130,38 +182,11 @@ public:
 			printSignalMessage(signalType, message);
 			raise(SIGINT); // handled by the shutdownHandler
 			break;
-
 		case Signals::SignalType::PASSWORDNEEDED:
-			EVP_PKEY *serverPublicKey = LoadKey::LoadPublicKey(serverPublicKeyPath);
-
-			if (!serverPublicKey)
-			{
-				std::cout << "Cannot load server's public key. Exiting." << std::endl;
-				raise(SIGINT);
-			}
-
-			std::string password;
-			std::getline(std::cin, password);
-
-			std::string encryptedPassword = Encode::base64Encode(Encrypt::encryptDataRSA(serverPublicKey, password));
-
-			EVP_PKEY_free(serverPublicKey);
-
-			if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, encryptedPassword.c_str(), encryptedPassword.size()))
-				raise(SIGINT);
-
-			std::cout << "Verifying password.." << std::endl;
-
-			std::string passwordVerification;
-
-			if ((passwordVerification = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
-				raise(SIGINT);
-
-			printSignalMessage(Signals::SignalManager::getSignalTypeFromMessage(passwordVerification), message);
-
-			if (Signals::SignalManager::getSignalTypeFromMessage(passwordVerification) != Signals::SignalType::CORRECTPASSWORD)
-				raise(SIGINT);
-
+			// enterServerPassword(ssl, message); // come back to this later when implementing it
+			break;
+		case Signals::SignalType::NEWAESKEY:
+			setNewAesKey(message, privateKeyPath, encryption, key, keySize, iv, ivSize);
 			break;
 		}
 	}

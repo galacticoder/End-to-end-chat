@@ -8,11 +8,12 @@
 #include <thread>
 #include <vector>
 #include "../include/ssl.hpp"
+#include "../include/send_receive.hpp"
+#include "../include/signals.hpp"
 #include "../include/keys.hpp"
 #include "../include/file_handling.hpp"
 #include "../include/networking.hpp"
 #include "../include/encryption.hpp"
-#include "../include/send_receive.hpp"
 
 std::function<void(int)> shutdownHandler;
 void signalHandle(int signal) { shutdownHandler(signal); }
@@ -29,26 +30,16 @@ void ReceiveMessages(SSL *ssl, const std::string privateKeyPath, CryptoPP::GCM<C
 		if ((message = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
 		{
 			std::cout << "Server killed" << std::endl;
+			// clean up here and exit
 			return;
 		}
 
-		// SignalType anySignalReceive = SignalHandling::getSignalType(receivedMessage);
-		// SignalHandling::handleSignal(anySignalReceive, receivedMessage, ssl, receivedPublicKey);
-		// when it looks like a random exit its cuz it didnt receive a key properly so pause the other client from sending messages till after this guy receives the key
+		Signals::SignalType detectSignal = Signals::SignalManager::getSignalTypeFromMessage(message);
+		HandleSignal(detectSignal, message, privateKeyPath, encryption, key, sizeof(key), iv, sizeof(iv));
 
-		if (message.find("AESkey") != std::string::npos)
-		{
-			message = message.substr(0, message.find("AESkey"));
-			message = Decode::base64Decode(message);
-			EVP_PKEY *privateKey = LoadKey::LoadPrivateKey(privateKeyPath);
-			message = Decrypt::decryptDataRSA(privateKey, message);
-			Decode::deserializeKeyAndIV(message, key, sizeof(key), iv, sizeof(iv));
-			encryption.SetKeyWithIV(key, sizeof(key), iv, sizeof(iv));
-		}
-		else
+		if (detectSignal == Signals::SignalType::UNKNOWN)
 		{
 			Decode::deserializeIV(message, iv, sizeof(iv));
-			// std::cout << "Message: " << message << std::endl;
 			std::string decryptedMessage = Decrypt::decryptDataAESGCM(message, key, sizeof(key), iv, sizeof(iv));
 			std::cout << "Received message: " << decryptedMessage << std::endl;
 		}
@@ -91,16 +82,18 @@ void communicateWithServer(SSL *ssl)
 
 	std::thread(ReceiveMessages, ssl, privateKey, std::ref(encryption)).detach();
 
+	std::cout << "You can now chat" << std::endl;
 	while (1)
 	{
 		std::string message;
 		std::getline(std::cin, message);
-		std::string ciphertext = Encrypt::encryptDataAESGCM(message, key, sizeof(key));
 
+		if (message.empty())
+			continue;
+
+		std::string ciphertext = Encrypt::encryptDataAESGCM(message, key, sizeof(key));
 		if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, ciphertext.data(), ciphertext.size()))
-		{
 			return;
-		}
 	}
 }
 
