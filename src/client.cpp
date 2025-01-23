@@ -55,6 +55,16 @@ void communicateWithServer(SSL *ssl)
 	if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, username.data(), username.size()))
 		return;
 
+	std::string validateUsername;
+	if ((validateUsername = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
+	{
+		CleanUp::Client::cleanUpClient();
+		return;
+	}
+
+	Signals::SignalType getSignal = Signals::SignalManager::getSignalTypeFromMessage(validateUsername);
+	HandleSignal(getSignal, validateUsername, key, sizeof(key), iv, sizeof(iv));
+
 	SetKeyPaths setKeyPaths(username);
 	GenerateKeys::generateRSAKeys(clientPrivateKeyPath, clientPublicKeyPath);
 
@@ -64,19 +74,26 @@ void communicateWithServer(SSL *ssl)
 
 	int amountOfKeys;
 	if (!Receive::Client::receiveAllPublicKeys(ssl, &amountOfKeys))
+	{
+		CleanUp::Client::cleanUpClient();
 		return;
+	}
 
 	CryptoPP::GCM<CryptoPP::AES>::Encryption setKey;
 	GenerateKeys::generateKeyAESGCM(key, iv);
 	setKey.SetKeyWithIV(key, sizeof(key), iv, sizeof(iv));
 
 	std::string serializedKeyAndIv = Encode::serializeKeyAndIV(key, sizeof(key), iv, sizeof(iv));
+
 	if (!Send::Client::sendEncryptedAESKey(ssl, serializedKeyAndIv, amountOfKeys))
+	{
+		CleanUp::Client::cleanUpClient();
 		return;
+	}
 
 	std::thread(receiveMessages, ssl).detach();
-
 	std::cout << "You can now chat" << std::endl;
+
 	while (1)
 	{
 		std::string message;

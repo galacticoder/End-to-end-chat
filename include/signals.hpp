@@ -35,7 +35,7 @@ namespace Signals
 		static inline std::vector<size_t> signalStringSizes;
 
 		static inline std::vector<std::string> signalStringsVector = {
-			"KEYLOADERROR", "KEYEXISTERR", "CORRECTPASSWORD", "INCORRECTPASSWORD", "NAMEEXISTSERR", "RATELIMITED", "USERLIMITREACHED", "PASSWORDNEEDED", "PASSWORDNOTNEEDED", "INVALIDNAMECHARS", "INVALIDNAMELENGTH", "BLACKLISTED", "NEWAESKEY"};
+			"KEYLOADERROR", "KEYEXISTERR", "CORRECTPASSWORD", "INCORRECTPASSWORD", "NAMEEXISTSERR", "RATELIMITED", "USERLIMITREACHED", "PASSWORDNEEDED", "PASSWORDNOTNEEDED", "INVALIDNAMECHARS", "INVALIDNAMELENGTH", "BLACKLISTED", "NEWAESKEY", "UNKNOWN"};
 
 		static inline std::vector<std::string> serverMessages = {
 			"Public key could not be loaded on the server.",
@@ -48,14 +48,15 @@ namespace Signals
 			"Enter the server password to join.",
 			"Welcome to the server.",
 			"Username contains invalid characters.",
-			"", // invalid name length is set later
+			"Username is an invalid length", // invalid name length is set later
 			"You are blacklisted from the server.",
-			""}; // no message for aeskey}
+			"",	 // no message for new aeskey
+			""}; // no message for unknown
 
 	public:
 		SignalManager()
 		{
-			if (!signalStringSizes.empty())
+			if (signalStringSizes.empty())
 				for (size_t i = 0; i < signalStringsVector.size(); i++)
 					signalStringSizes.push_back((signalStringsVector[i]).length());
 		}
@@ -65,7 +66,7 @@ namespace Signals
 			size_t index = static_cast<size_t>(signalType);
 
 			if (index < serverMessages.size())
-				return serverMessages[index];
+				return Encode::base64Encode(serverMessages[index]);
 
 			std::cerr << fmt::format("Invalid signal type: {}", static_cast<int>(signalType)) << std::endl;
 			return "";
@@ -105,7 +106,8 @@ private:
 
 	static void printSignalMessage(Signals::SignalType signalType, const std::string &message)
 	{
-		std::cout << Decode::base64Decode(message.substr(0, message.size() - signalStringSizes[static_cast<size_t>(signalType)])) << std::endl;
+		std::string extractedMessage = message.substr(0, message.size() - signalStringSizes[static_cast<size_t>(signalType)]);
+		std::cout << Decode::base64Decode(message.substr(0, message.size())) << std::endl;
 	};
 
 	static void setNewAesKey(std::string &message, CryptoPP::byte *key, size_t &keySize, CryptoPP::byte *iv, size_t &ivSize)
@@ -181,7 +183,6 @@ public:
 		case Signals::SignalType::INVALIDNAME:
 		case Signals::SignalType::INVALIDNAMELENGTH:
 		case Signals::SignalType::BLACKLISTED:
-		case Signals::SignalType::UNKNOWN:
 			printSignalMessage(signalType, message);
 			raise(SIGINT); // handled by the shutdownHandler
 			break;

@@ -13,6 +13,7 @@
 #include "../include/file_handling.hpp"
 #include "../include/networking.hpp"
 #include "../include/config.hpp"
+#include "../include/security.hpp"
 #include "../include/encryption.hpp"
 #include "../include/cleanup.hpp"
 #include "../include/send_receive.hpp"
@@ -26,22 +27,38 @@ void handleClient(SSL *ssl, int &clientSocket)
 
 	std::string clientUsername;
 	if ((clientUsername = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
+	{
+		CleanUp::Server::cleanUpClient(ssl, clientSocket, clientUsername);
 		return;
+	}
+
+	if (!ValidateClient::checkClientUsernameValidity(ssl, clientUsername))
+	{
+		CleanUp::Server::cleanUpClient(ssl, clientSocket, clientUsername);
+		return;
+	}
 
 	std::string clientPublicKey;
 	if ((clientPublicKey = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
+	{
+		CleanUp::Server::cleanUpClient(ssl, clientSocket, clientUsername);
 		return;
-
-	// check username to see if valid later according to server rules
+	}
 
 	ServerStorage::clientPublicKeys[clientUsername] = clientPublicKey;
 	std::cout << "Public key: " << clientPublicKey << std::endl;
 
 	if (!Send::Server::sendAllPublicKeys(ssl, clientUsername))
+	{
 		CleanUp::Server::cleanUpClient(ssl, clientSocket, clientUsername);
+		return;
+	}
 
 	if (!Receive::Server::receiveAndSendEncryptedAesKey(ssl))
+	{
 		CleanUp::Server::cleanUpClient(ssl, clientSocket, clientUsername);
+		return;
+	}
 
 	while (1)
 	{
@@ -97,6 +114,7 @@ int main()
 			std::cout << "Error accepting client: ";
 			ERR_print_errors_fp(stderr);
 			CleanUp::Server::cleanUpClient(ssl, clientSocket);
+			continue;
 		}
 
 		std::thread(handleClient, ssl, std::ref(clientSocket)).detach();

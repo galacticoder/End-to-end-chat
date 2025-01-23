@@ -70,7 +70,6 @@ public:
 			if (!sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, amountOfUsers.c_str(), amountOfUsers.size()))
 				return false;
 
-			// send the amount of keys before sending vector so client can stop receiving
 			if (ServerStorage::clientPublicKeys.size() <= 1)
 			{
 				std::cout << fmt::format("Skipping sending all public keys, Only {} public key in public keys map", ServerStorage::clientPublicKeys.size()) << std::endl;
