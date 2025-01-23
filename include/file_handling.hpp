@@ -8,6 +8,7 @@
 #include <openssl/ssl.h>
 
 const std::string keysDirectory = "../keys/";
+const std::string receivedKeysDirectory = "../received_keys/";
 
 const std::string serverPrivateKeyPath = keysDirectory + "serverPrivateKey.key";
 const std::string serverCertPath = keysDirectory + "serverCert.crt";
@@ -15,8 +16,18 @@ const std::string serverCertPath = keysDirectory + "serverCert.crt";
 const std::string clientPrivateKeyCertPath = keysDirectory + "clientPrivateKeyCert.key";
 const std::string clientCertPath = keysDirectory + "clientCert.crt";
 
-const std::string clientPrivateKeyPath = keysDirectory + "clientPrivateKey.pem";
-const std::string clientPublicKeyPath = keysDirectory + "clientPublicKey.pem";
+std::string clientPrivateKeyPath;
+std::string clientPublicKeyPath;
+
+class SetKeyPaths
+{
+public:
+	SetKeyPaths(std::string &username)
+	{
+		clientPrivateKeyPath = fmt::format("{}{}PrivateKey.pem", keysDirectory, username);
+		clientPublicKeyPath = fmt::format("{}{}PublicKey.pem", keysDirectory, username);
+	}
+};
 
 class FileTransferManager
 {
@@ -115,11 +126,7 @@ struct DeletePath
 		if (std::filesystem::is_directory(path))
 			std::filesystem::remove_all(path, errorCode) ? std::cout << fmt::format("Deleted all files in path: {}", path) << std::endl : std::cout << "Could not delete all files in directory: " << errorCode.message() << std::endl;
 
-		if (std::filesystem::remove(path, errorCode))
-		{
-			std::cout << fmt::format("Could not delete path: {}", errorCode.message()) << std::endl;
-			return;
-		}
+		std::filesystem::remove(path);
 
 		std::cout << fmt::format("Deleted path: {}", path) << std::endl;
 	}

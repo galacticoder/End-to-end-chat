@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <fmt/core.h>
 #include "encryption.hpp"
+#include "file_handling.hpp"
 #include "keys.hpp"
 
 namespace Signals
@@ -107,16 +108,18 @@ private:
 		std::cout << Decode::base64Decode(message.substr(0, message.size() - signalStringSizes[static_cast<size_t>(signalType)])) << std::endl;
 	};
 
-	static void setNewAesKey(std::string &message, const std::string &privateKeyPath, CryptoPP::GCM<CryptoPP::AES>::Encryption &encryption, CryptoPP::byte *key, size_t &keySize, CryptoPP::byte *iv, size_t &ivSize)
+	static void setNewAesKey(std::string &message, CryptoPP::byte *key, size_t &keySize, CryptoPP::byte *iv, size_t &ivSize)
 	{
+		CryptoPP::GCM<CryptoPP::AES>::Encryption setNewKey;
+
 		message = message.substr(0, message.size() - Signals::SignalManager::getSignalAsString(Signals::SignalType::NEWAESKEY).size());
 		message = Decode::base64Decode(message);
 
-		EVP_PKEY *privateKey = LoadKey::LoadPrivateKey(privateKeyPath);
+		EVP_PKEY *privateKey = LoadKey::LoadPrivateKey(clientPrivateKeyPath);
 		message = Decrypt::decryptDataRSA(privateKey, message);
 
 		Decode::deserializeKeyAndIV(message, key, keySize, iv, ivSize);
-		encryption.SetKeyWithIV(key, keySize, iv, ivSize);
+		setNewKey.SetKeyWithIV(key, keySize, iv, ivSize);
 
 		std::cout << "New key has been set" << std::endl;
 	}
@@ -157,7 +160,7 @@ private:
 	// };
 
 public:
-	HandleSignal(Signals::SignalType signalType, std::string &message, const std::string &privateKeyPath, CryptoPP::GCM<CryptoPP::AES>::Encryption &encryption, CryptoPP::byte *key, size_t keySize, CryptoPP::byte *iv, size_t ivSize)
+	HandleSignal(Signals::SignalType signalType, std::string &message, CryptoPP::byte *key, size_t keySize, CryptoPP::byte *iv, size_t ivSize)
 	{
 
 		if (signalType == Signals::SignalType::UNKNOWN)
@@ -186,7 +189,7 @@ public:
 			// enterServerPassword(ssl, message); // come back to this later when implementing it
 			break;
 		case Signals::SignalType::NEWAESKEY:
-			setNewAesKey(message, privateKeyPath, encryption, key, keySize, iv, ivSize);
+			setNewAesKey(message, key, keySize, iv, ivSize);
 			break;
 		}
 	}

@@ -14,7 +14,7 @@
 #include "../include/networking.hpp"
 #include "../include/config.hpp"
 #include "../include/encryption.hpp"
-#include "../include/server.hpp"
+#include "../include/cleanup.hpp"
 #include "../include/send_receive.hpp"
 
 std::function<void(int)> shutdownHandler;
@@ -89,7 +89,7 @@ int main()
 		{
 			std::cout << "Error accepting client: ";
 			ERR_print_errors_fp(stderr);
-			Clean::cleanUpClient(ssl, clientSocket);
+			CleanUp::Server::cleanUpClient(ssl, clientSocket);
 		}
 
 		std::thread(handleClient, ssl).detach();
