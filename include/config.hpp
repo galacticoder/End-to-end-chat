@@ -7,8 +7,7 @@
 class ServerStorage
 {
 public:
-	static const int SERVER_USER_LIMIT = 2;
-	static inline std::vector<int> clientSockets;
+	static const int SERVER_USER_LIMIT = 9; // add this to the server later
 	static inline std::vector<SSL *> clientSSLSockets;
-	static inline std::vector<std::string> publicKeyData;
+	static inline std::map<std::string, std::string> clientPublicKeys;
 };

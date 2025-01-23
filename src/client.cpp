@@ -52,6 +52,9 @@ void communicateWithServer(SSL *ssl)
 	std::string username;
 	std::getline(std::cin, username);
 
+	if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, username.data(), username.size()))
+		return;
+
 	SetKeyPaths setKeyPaths(username);
 	GenerateKeys::generateRSAKeys(clientPrivateKeyPath, clientPublicKeyPath);
 

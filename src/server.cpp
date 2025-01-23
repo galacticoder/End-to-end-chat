@@ -20,36 +20,43 @@
 std::function<void(int)> shutdownHandler;
 void signalHandle(int signal) { shutdownHandler(signal); }
 
-void handleClient(SSL *ssl)
+void handleClient(SSL *ssl, int &clientSocket)
 {
 	ServerStorage::clientSSLSockets.push_back(ssl);
 
-	std::string publicKey;
-	if ((publicKey = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
+	std::string clientUsername;
+	if ((clientUsername = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
 		return;
 
-	ServerStorage::publicKeyData.push_back(publicKey);
-	std::cout << "Public key: " << publicKey << std::endl;
+	std::string clientPublicKey;
+	if ((clientPublicKey = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
+		return;
 
-	if (!Send::Server::sendAllPublicKeys(ssl, ServerStorage::publicKeyData, publicKey))
-	{
-		// clean up client here
-	}
+	// check username to see if valid later according to server rules
+
+	ServerStorage::clientPublicKeys[clientUsername] = clientPublicKey;
+	std::cout << "Public key: " << clientPublicKey << std::endl;
+
+	if (!Send::Server::sendAllPublicKeys(ssl, clientUsername))
+		CleanUp::Server::cleanUpClient(ssl, clientSocket, clientUsername);
 
 	if (!Receive::Server::receiveAndSendEncryptedAesKey(ssl))
-	{
-		// clean up client
-	}
+		CleanUp::Server::cleanUpClient(ssl, clientSocket, clientUsername);
 
 	while (1)
 	{
 		std::string message;
 		if ((message = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
+		{
+			CleanUp::Server::cleanUpClient(ssl, clientSocket, clientUsername);
 			return;
+		}
 
 		std::cout << "Client message: " << message << std::endl;
+
 		if (!Send::Server::broadcastMessage(ssl, message))
 		{
+			CleanUp::Server::cleanUpClient(ssl, clientSocket, clientUsername);
 			return;
 		}
 	}
@@ -92,8 +99,7 @@ int main()
 			CleanUp::Server::cleanUpClient(ssl, clientSocket);
 		}
 
-		std::thread(handleClient, ssl).detach();
-		// Clean::cleanUpClient(ssl, clientSocket);
+		std::thread(handleClient, ssl, std::ref(clientSocket)).detach();
 	}
 
 	close(serverSocket);

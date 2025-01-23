@@ -63,27 +63,24 @@ public:
 			return true;
 		}
 
-		static bool sendAllPublicKeys(SSL *ssl, std::vector<std::string> &publicKeysVector, const std::string &userPublicKey)
+		static bool sendAllPublicKeys(SSL *ssl, const std::string &username)
 		{
-
-			std::string amountOfUsers = std::to_string(publicKeysVector.size() - 1); // -1 for the current user
+			std::string amountOfUsers = std::to_string(ServerStorage::clientPublicKeys.size() - 1); // -1 for the current user
 
 			if (!sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, amountOfUsers.c_str(), amountOfUsers.size()))
 				return false;
 
 			// send the amount of keys before sending vector so client can stop receiving
-			if (publicKeysVector.size() <= 1)
+			if (ServerStorage::clientPublicKeys.size() <= 1)
 			{
-				std::cout << fmt::format("Skipping sending all public keys, Only {} public key in vector", publicKeysVector.size()) << std::endl;
+				std::cout << fmt::format("Skipping sending all public keys, Only {} public key in public keys map", ServerStorage::clientPublicKeys.size()) << std::endl;
 				return true;
 			}
 
-			for (std::string i : publicKeysVector)
-			{
-				if (i != userPublicKey)
-					if (!sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, i.c_str(), i.size()))
+			for (auto const &[key, val] : ServerStorage::clientPublicKeys)
+				if (key != username)
+					if (!sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, val.c_str(), val.size()))
 						return false;
-			};
 
 			std::cout << "Sent all public keys" << std::endl;
 			return true;
