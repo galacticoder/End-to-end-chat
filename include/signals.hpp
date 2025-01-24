@@ -107,7 +107,7 @@ private:
 	static void printSignalMessage(Signals::SignalType signalType, const std::string &message)
 	{
 		std::string extractedMessage = message.substr(0, message.size() - signalStringSizes[static_cast<size_t>(signalType)]);
-		std::cout << Decode::base64Decode(message.substr(0, message.size())) << std::endl;
+		std::cout << Decode::base64Decode(extractedMessage) << std::endl;
 	};
 
 	static void setNewAesKey(std::string &message, CryptoPP::byte *key, size_t &keySize, CryptoPP::byte *iv, size_t &ivSize)
