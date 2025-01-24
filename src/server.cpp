@@ -117,6 +117,12 @@ int main()
 			continue;
 		}
 
+		if (!ValidateClient::checkServerUserLimit(ssl))
+		{
+			CleanUp::Server::cleanUpClient(ssl, clientSocket);
+			continue;
+		}
+
 		std::thread(handleClient, ssl, std::ref(clientSocket)).detach();
 	}
 

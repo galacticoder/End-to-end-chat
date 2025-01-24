@@ -7,7 +7,6 @@
 class ServerStorage
 {
 public:
-	static const int SERVER_USER_LIMIT = 9; // add this to the server later
 	static inline std::vector<SSL *> clientSSLSockets;
 	static inline std::map<std::string, std::string> clientPublicKeys;
 };
@@ -15,6 +14,7 @@ public:
 class ServerConfig
 {
 public:
+	static const size_t SERVER_USER_LIMIT = 9;
 	static inline size_t MAX_USERNAME_LENGTH = 12;
 	static inline size_t MIN_USERNAME_LENGTH = 3;
 	static inline std::string unallowedCharacters = "/\\{}|.,()~`";

@@ -20,7 +20,7 @@ struct StringLiteral
 	char value[N];
 };
 
-class Send : public Encrypt
+class Send
 {
 protected:
 	static void printSSLError(int sslError)
@@ -51,15 +51,12 @@ public:
 	public:
 		static bool broadcastMessage(SSL *ssl, std::string &message)
 		{
-			std::cout << "In broadcast" << std::endl;
+			std::cout << "Broadcasting message: " << message << std::endl;
 			for (SSL *socket : ServerStorage::clientSSLSockets)
-			{
 				if (socket != ssl)
-				{
 					if (!sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(socket, message.data(), message.size()))
 						return false;
-				}
-			}
+
 			return true;
 		}
 

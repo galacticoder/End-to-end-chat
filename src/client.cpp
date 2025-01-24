@@ -147,7 +147,21 @@ int main()
 		_exit(signal); // seg fault here
 	};
 
-	SSL_connect(ssl) <= 0 ? ERR_print_errors_fp(stderr) : communicateWithServer(ssl);
+	if (SSL_connect(ssl) <= 0)
+	{
+		ERR_print_errors_fp(stderr);
+	}
+	else
+	{
+		std::string getSignalString;
+		if ((getSignalString = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
+			CleanUp::Client::cleanUpClient();
+
+		Signals::SignalType getSignal = Signals::SignalManager::getSignalTypeFromMessage(getSignalString);
+		HandleSignal(getSignal, getSignalString, key, sizeof(key), iv, sizeof(iv));
+
+		communicateWithServer(ssl);
+	}
 
 	CleanUp::Client::cleanUpClient();
 	return 0;

@@ -63,10 +63,8 @@ namespace Signals
 
 		static std::string getSignalMessage(SignalType signalType)
 		{
-			size_t index = static_cast<size_t>(signalType);
-
-			if (index < serverMessages.size())
-				return Encode::base64Encode(serverMessages[index]);
+			if (static_cast<size_t>(signalType) < serverMessages.size())
+				return Encode::base64Encode(serverMessages[static_cast<size_t>(signalType)]);
 
 			std::cerr << fmt::format("Invalid signal type: {}", static_cast<int>(signalType)) << std::endl;
 			return "";
@@ -78,6 +76,15 @@ namespace Signals
 				return signalStringsVector[static_cast<size_t>(signalType)];
 
 			std::cerr << fmt::format("Invalid signal type: {}", static_cast<size_t>(signalType)) << std::endl;
+			return "";
+		}
+
+		static std::string getSignalMessageWithSignalStringAppended(SignalType signalType)
+		{
+			if (static_cast<size_t>(signalType) < serverMessages.size())
+				return Encode::base64Encode(serverMessages[static_cast<size_t>(signalType)]).append(getSignalAsString(signalType));
+
+			std::cerr << fmt::format("Invalid signal type: {}", static_cast<int>(signalType)) << std::endl;
 			return "";
 		}
 
@@ -164,12 +171,11 @@ private:
 public:
 	HandleSignal(Signals::SignalType signalType, std::string &message, CryptoPP::byte *key, size_t keySize, CryptoPP::byte *iv, size_t ivSize)
 	{
-
-		if (signalType == Signals::SignalType::UNKNOWN)
-			return;
-
 		switch (signalType)
 		{
+		case Signals::SignalType::UNKNOWN:
+			return;
+			break;
 		case Signals::SignalType::PASSWORDNOTNEEDED:
 		case Signals::SignalType::CORRECTPASSWORD:
 			printSignalMessage(signalType, message);
