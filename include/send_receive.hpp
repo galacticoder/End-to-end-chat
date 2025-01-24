@@ -194,12 +194,8 @@ public:
 					int extractedIndex = stoi(encryptedAesKey.substr(encryptedAesKey.find(":") + 1));
 					std::string encryptedKey = encryptedAesKey.substr(0, encryptedAesKey.find(":"));
 
-					std::cout << fmt::format("Sending aes key to client SSL socket index: {}", extractedIndex) << std::endl;
-
 					if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ServerStorage::clientSSLSockets[extractedIndex], encryptedKey.data(), encryptedKey.size()))
 						return false;
-
-					std::cout << fmt::format("Sent aes key to client SSL socket index: {}", extractedIndex) << std::endl;
 				}
 
 				std::cout << "Sent all aes keys" << std::endl;

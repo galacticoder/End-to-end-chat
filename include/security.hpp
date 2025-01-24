@@ -3,6 +3,8 @@
 #include <iostream>
 #include "config.hpp"
 #include "signals.hpp"
+#include "send_receive.hpp"
+#include "encryption.hpp"
 
 class ValidateClient
 {
@@ -62,5 +64,52 @@ public:
 			return false;
 
 		return Signals::SignalManager::getSignalTypeFromMessage(signalMessage) == Signals::SignalType::SERVERLIMIT ? false : true;
+	}
+
+	static bool checkAndVerifyServerPassword(SSL *ssl, const std::string &serverHashedPassword)
+	{
+		std::cout << "Waiting to receive password from client.." << std::endl;
+
+		std::string signalMessage = Signals::SignalManager::getSignalMessageWithSignalStringAppended(serverHashedPassword.empty() ? Signals::SignalType::PASSWORDNOTNEEDED : Signals::SignalType::PASSWORDNEEDED);
+
+		if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, signalMessage.data(), signalMessage.size()))
+			return false;
+
+		if (serverHashedPassword.empty())
+			return true;
+
+		std::string receivedPassword;
+		if ((receivedPassword = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
+			return false;
+
+		std::cout << "Hashed password received: " << receivedPassword << std::endl;
+
+		EVP_PKEY *serverPrivateKey = LoadKey::LoadPrivateKey(ServerPrivateKeyPath);
+
+		if (!serverPrivateKey)
+		{
+			std::cout << "Could not load server private key for decryption. Killing server." << std::endl;
+			return false;
+		}
+
+		receivedPassword = Decode::base64Decode(receivedPassword);
+		receivedPassword = Decrypt::decryptDataRSA(serverPrivateKey, receivedPassword);
+
+		EVP_PKEY_free(serverPrivateKey);
+
+		std::cout << "Validating password sent by client" << std::endl;
+		if (!bcrypt::validatePassword(receivedPassword, serverHashedPassword))
+		{
+			signalMessage = Signals::SignalManager::getSignalMessageWithSignalStringAppended(Signals::SignalType::INCORRECTPASSWORD);
+			if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, signalMessage.data(), signalMessage.size()))
+				return false;
+			return false;
+		}
+
+		signalMessage = Signals::SignalManager::getSignalMessageWithSignalStringAppended(Signals::SignalType::CORRECTPASSWORD);
+		if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, signalMessage.data(), signalMessage.size()))
+			return false;
+
+		return true;
 	}
 };

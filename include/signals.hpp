@@ -48,7 +48,7 @@ namespace Signals
 			"Enter the server password to join.",
 			"Welcome to the server.",
 			"Username contains invalid characters.",
-			"Username is an invalid length", // invalid name length is set later
+			"Username is an invalid length",
 			"You are blacklisted from the server.",
 			"",	 // no message for new aeskey
 			""}; // no message for unknown

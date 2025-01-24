@@ -68,7 +68,7 @@ public:
 	{
 	public:
 		static void cleanUpClient()
-		{
+		{ // work on this soon
 			raise(SIGINT);
 		}
 	};

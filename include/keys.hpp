@@ -163,7 +163,7 @@ public:
 class LoadKey
 {
 public:
-	static EVP_PKEY *LoadPrivateKey(const std::string &privateKeyFile, const bool echo = 1 /*Echo output or not. On by default. Off is 0 */)
+	static EVP_PKEY *LoadPrivateKey(const std::string &privateKeyFile)
 	{
 		BIO *bio = BIO_new_file(privateKeyFile.c_str(), "r");
 		if (!bio)
@@ -183,13 +183,12 @@ public:
 			return nullptr;
 		}
 
-		if (echo == 1)
-			std::cout << "Loaded RSA Private key file (" << privateKeyFile << ") successfully" << std::endl;
+		std::cout << "Loaded RSA Private key file (" << privateKeyFile << ") successfully" << std::endl;
 
 		return pkey;
 	}
 
-	static EVP_PKEY *LoadPublicKey(const std::string &publicKeyFile, const bool echo = 1 /*Echo output or not. On by default. Off is 0 */)
+	static EVP_PKEY *LoadPublicKey(const std::string &publicKeyFile)
 	{
 		BIO *bio = BIO_new_file(publicKeyFile.c_str(), "r");
 		if (!bio)
@@ -208,8 +207,7 @@ public:
 			return nullptr;
 		}
 
-		if (echo != 0)
-			std::cout << "Loaded RSA Public key file (" << publicKeyFile << ") successfully" << std::endl;
+		std::cout << "Loaded RSA Public key file (" << publicKeyFile << ") successfully" << std::endl;
 
 		return pkey;
 	}
