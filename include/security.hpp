@@ -5,6 +5,7 @@
 #include "signals.hpp"
 #include "send_receive.hpp"
 #include "encryption.hpp"
+#include "bcrypt.h"
 
 class ValidateClient
 {
