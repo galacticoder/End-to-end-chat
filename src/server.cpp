@@ -17,6 +17,7 @@
 #include "../include/encryption.hpp"
 #include "../include/cleanup.hpp"
 #include "../include/send_receive.hpp"
+#include "../include/bcrypt.h"
 
 std::function<void(int)> shutdownHandler;
 void signalHandle(int signal) { shutdownHandler(signal); }
@@ -32,7 +33,7 @@ void handleClient(SSL *ssl, int &clientSocket)
 		return;
 	}
 
-	if (!ValidateClient::checkClientUsernameValidity(ssl, clientUsername))
+	if (!Validate::Server::checkClientUsernameValidity(ssl, clientUsername))
 	{
 		CleanUp::Server::cleanUpClient(ssl, clientSocket, clientUsername);
 		return;
@@ -81,13 +82,15 @@ void handleClient(SSL *ssl, int &clientSocket)
 
 int main()
 {
+	SetServerPassword setServerPassword;
+
 	SSLSetup::initOpenssl();
 
-	CreateDirectory makeKeysDir(keysDirectory);
-	GenerateKeys::generateCertAndPrivateKey(serverPrivateKeyPath, serverCertPath);
+	CreateDirectory makeKeysDir(FilePaths::keysDirectory);
+	GenerateKeys::generateCertAndPrivateKey(FilePaths::serverPrivateKeyPath, FilePaths::serverCertPath);
 
 	SSL_CTX *ctx = SSLSetup::createCTX(TLS_server_method());
-	SSLSetup::configureCTX(ctx, serverCertPath, serverPrivateKeyPath);
+	SSLSetup::configureCTX(ctx, FilePaths::serverCertPath, FilePaths::serverPrivateKeyPath);
 
 	int serverSocket = Networking::startServerSocket(Networking::findAvailablePort());
 
@@ -96,11 +99,13 @@ int main()
 		std::cout << fmt::format("\nSignal {} caught. Killing server", strsignal(signal)) << std::endl;
 		close(serverSocket);
 		SSL_CTX_free(ctx);
-		DeletePath deleteDirectory(keysDirectory);
+		DeletePath deleteDirectory(FilePaths::keysDirectory);
 		exit(signal);
 	};
 
 	std::signal(SIGINT, signalHandle);
+
+	GenerateKeys::generateRSAKeys(FilePaths::serverPrivateKeyPath, FilePaths::serverPublicKeyPath);
 
 	while (1)
 	{
@@ -117,7 +122,14 @@ int main()
 			continue;
 		}
 
-		if (!ValidateClient::checkServerUserLimit(ssl))
+		const std::string serverPublicKey = ReadFile::ReadPemKeyContents(FilePaths::serverPublicKeyPath);
+		if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, serverPublicKey.data(), serverPublicKey.size()))
+		{
+			CleanUp::Server::cleanUpClient(ssl, clientSocket);
+			continue;
+		}
+
+		if (!Validate::Server::handleClientPreChecks(ssl))
 		{
 			CleanUp::Server::cleanUpClient(ssl, clientSocket);
 			continue;
@@ -128,7 +140,7 @@ int main()
 
 	close(serverSocket);
 	SSL_CTX_free(ctx);
-	DeletePath deleteDirectory(keysDirectory);
+	DeletePath deleteDirectory(FilePaths::keysDirectory);
 
 	std::cout << "Cleaned up server" << std::endl;
 	return 0;

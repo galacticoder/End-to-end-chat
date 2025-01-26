@@ -7,22 +7,21 @@
 #include <fmt/core.h>
 #include <openssl/ssl.h>
 
-const std::string keysDirectory = "../keys/";
-const std::string receivedKeysDirectory = "../received_keys/";
-
-const std::string serverPrivateKeyPath = keysDirectory + "serverPrivateKey.key";
-const std::string serverCertPath = keysDirectory + "serverCert.crt";
-
-const std::string clientPrivateKeyCertPath = keysDirectory + "clientPrivateKeyCert.key";
-const std::string clientCertPath = keysDirectory + "clientCert.crt";
-
-std::string clientPrivateKeyPath;
-std::string clientPublicKeyPath;
-
-class SetKeyPaths
+struct FilePaths
 {
-public:
-	SetKeyPaths(std::string &username)
+	static const inline std::string keysDirectory = "../keys/";
+	static const inline std::string receivedKeysDirectory = "../received_keys/";
+	static const inline std::string serverPrivateKeyPath = keysDirectory + "serverPrivateKey.key"; // overwrite this with a new key
+	static const inline std::string serverPublicKeyPath = keysDirectory + "serverPublicKey.key";
+	static const inline std::string serverCertPath = keysDirectory + "serverCert.crt";
+	static const inline std::string clientPrivateKeyCertPath = keysDirectory + "clientPrivateKeyCert.key";
+	static const inline std::string clientCertPath = keysDirectory + "clientCert.crt";
+	static const inline std::string clientServerPublicKeyPath = receivedKeysDirectory + "serverPublicKey.pem";
+
+	static inline std::string clientPrivateKeyPath;
+	static inline std::string clientPublicKeyPath;
+
+	static void setKeyPaths(std::string &username)
 	{
 		clientPrivateKeyPath = fmt::format("{}{}PrivateKey.pem", keysDirectory, username);
 		clientPublicKeyPath = fmt::format("{}{}PublicKey.pem", keysDirectory, username);
@@ -112,8 +111,6 @@ struct CreateDirectory
 
 		if (!std::filesystem::create_directories(directoryName))
 			std::cout << fmt::format("Couldnt create directory: {}", directoryName) << std::endl;
-
-		exit(EXIT_FAILURE);
 	}
 };
 

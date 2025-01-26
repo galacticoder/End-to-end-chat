@@ -65,10 +65,10 @@ void communicateWithServer(SSL *ssl)
 	Signals::SignalType getSignal = Signals::SignalManager::getSignalTypeFromMessage(validateUsername);
 	HandleSignal(getSignal, validateUsername, key, sizeof(key), iv, sizeof(iv));
 
-	SetKeyPaths setKeyPaths(username);
-	GenerateKeys::generateRSAKeys(clientPrivateKeyPath, clientPublicKeyPath);
+	FilePaths::setKeyPaths(username);
+	GenerateKeys::generateRSAKeys(FilePaths::clientPrivateKeyPath, FilePaths::clientPublicKeyPath);
 
-	const std::string publicKeyData = ReadFile::ReadPemKeyContents(clientPublicKeyPath);
+	const std::string publicKeyData = ReadFile::ReadPemKeyContents(FilePaths::clientPublicKeyPath);
 	if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, publicKeyData.data(), publicKeyData.size()))
 		return;
 
@@ -112,13 +112,13 @@ int main()
 {
 	SSLSetup::initOpenssl();
 
-	CreateDirectory makeKeysDir(keysDirectory);
-	CreateDirectory makeReceivedKeysDir(receivedKeysDirectory);
+	CreateDirectory makeKeysDir(FilePaths::keysDirectory);
+	CreateDirectory makeReceivedKeysDir(FilePaths::receivedKeysDirectory);
 
-	GenerateKeys::generateCertAndPrivateKey(clientPrivateKeyCertPath, clientCertPath);
+	GenerateKeys::generateCertAndPrivateKey(FilePaths::clientPrivateKeyCertPath, FilePaths::clientCertPath);
 
 	SSL_CTX *ctx = SSLSetup::createCTX(TLS_client_method());
-	SSLSetup::configureCTX(ctx, clientCertPath, clientPrivateKeyCertPath);
+	SSLSetup::configureCTX(ctx, FilePaths::clientCertPath, FilePaths::clientPrivateKeyCertPath);
 
 	const std::string serverIpAddress = "127.0.0.1";
 	const int port = 8080;
@@ -142,8 +142,8 @@ int main()
 		if (ctx)
 			SSL_CTX_free(ctx);
 
-		DeletePath deleteKeysDirectory(keysDirectory);
-		DeletePath deleteReceivedKeysDirectory(receivedKeysDirectory);
+		DeletePath deleteKeysDirectory(FilePaths::keysDirectory);
+		DeletePath deleteReceivedKeysDirectory(FilePaths::receivedKeysDirectory);
 		_exit(signal); // seg fault here
 	};
 
@@ -153,12 +153,29 @@ int main()
 	}
 	else
 	{
+		std::string serverPublicKey;
+		if ((serverPublicKey = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
+			CleanUp::Client::cleanUpClient();
+
+		std::cout << "Server piub keuy :"
+				  << serverPublicKey << std::endl;
+		SaveFile savePubKey(FilePaths::clientServerPublicKeyPath, serverPublicKey, std::ios::binary);
+
 		std::string getSignalString;
 		if ((getSignalString = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
 			CleanUp::Client::cleanUpClient();
 
+		std::cout << "this 1: " << getSignalString << std::endl;
+
 		Signals::SignalType getSignal = Signals::SignalManager::getSignalTypeFromMessage(getSignalString);
-		HandleSignal(getSignal, getSignalString, key, sizeof(key), iv, sizeof(iv));
+		HandleSignal(getSignal, getSignalString);
+
+		if ((getSignalString = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
+			CleanUp::Client::cleanUpClient();
+
+		std::cout << "this 2: " << getSignalString << std::endl;
+		getSignal = Signals::SignalManager::getSignalTypeFromMessage(getSignalString);
+		HandleSignal(getSignal, getSignalString);
 
 		communicateWithServer(ssl);
 	}

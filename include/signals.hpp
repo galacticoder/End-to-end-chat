@@ -13,8 +13,6 @@ namespace Signals
 {
 	enum class SignalType
 	{
-		KEYLOADERR,
-		KEYEXISTERR,
 		CORRECTPASSWORD,
 		INCORRECTPASSWORD,
 		NAMEEXISTSERR,
@@ -35,23 +33,12 @@ namespace Signals
 		static inline std::vector<size_t> signalStringSizes;
 
 		static inline std::vector<std::string> signalStringsVector = {
-			"KEYLOADERROR", "KEYEXISTERR", "CORRECTPASSWORD", "INCORRECTPASSWORD", "NAMEEXISTSERR", "RATELIMITED", "USERLIMITREACHED", "PASSWORDNEEDED", "PASSWORDNOTNEEDED", "INVALIDNAMECHARS", "INVALIDNAMELENGTH", "BLACKLISTED", "NEWAESKEY", "UNKNOWN"};
+			"CORRECTPASSWORD", "INCORRECTPASSWORD", "NAMEEXISTSERR", "RATELIMITED", "USERLIMITREACHED", "PASSWORDNEEDED", "PASSWORDNOTNEEDED", "INVALIDNAMECHARS", "INVALIDNAMELENGTH", "BLACKLISTED", "NEWAESKEY", "UNKNOWN"};
+
+		static inline std::vector<std::string> serverSidePrintSignalMessageVector = {"Client entered the correct server password.", "Client entered incorrect server password.", "Client attempted to join with username that already exists.", "Client attempted to join while rate limited.", "Client attempted to join past server user limit set.", "Sent client password needed signal. Waiting for password...", "Server set without password.", "Client username contains invalid characters.", "Client username is an invalid length.", "Blacklisted client attempted to join server.", "", ""};
 
 		static inline std::vector<std::string> serverMessages = {
-			"Public key could not be loaded on the server.",
-			"Username already exists. You have been kicked.",
-			"Correct password entered.",
-			"Wrong password. You have been kicked.",
-			"Username already exists on server.",
-			"Rate limit reached. Try again later.",
-			"User limit reached. Exiting.",
-			"Enter the server password to join.",
-			"Welcome to the server.",
-			"Username contains invalid characters.",
-			"Username is an invalid length",
-			"You are blacklisted from the server.",
-			"",	 // no message for new aeskey
-			""}; // no message for unknown
+			"Correct password entered.", "Wrong password. You have been kicked.", "Username already exists on server.", "Rate limit reached. Try again later.", "User limit reached. Exiting.", "Enter the server password to join.", "Welcome to the server.", "Username contains invalid characters.", "Username is an invalid length", "You are blacklisted from the server.", "", ""};
 
 	public:
 		SignalManager()
@@ -59,6 +46,14 @@ namespace Signals
 			if (signalStringSizes.empty())
 				for (size_t i = 0; i < signalStringsVector.size(); i++)
 					signalStringSizes.push_back((signalStringsVector[i]).length());
+		}
+
+		static void printSignalServerMessage(SignalType signalType)
+		{
+			if (static_cast<size_t>(signalType) < serverSidePrintSignalMessageVector.size())
+				std::cout << serverSidePrintSignalMessageVector[static_cast<size_t>(signalType)] << std::endl;
+
+			std::cerr << fmt::format("Invalid signal type: {}", static_cast<int>(signalType)) << std::endl;
 		}
 
 		static std::string getSignalMessage(SignalType signalType)
@@ -105,6 +100,7 @@ namespace Signals
 }
 
 #include "send_receive.hpp"
+// #include "security.hpp"
 
 class HandleSignal : private Signals::SignalManager
 {
@@ -124,7 +120,7 @@ private:
 		message = message.substr(0, message.size() - Signals::SignalManager::getSignalAsString(Signals::SignalType::NEWAESKEY).size());
 		message = Decode::base64Decode(message);
 
-		EVP_PKEY *privateKey = LoadKey::LoadPrivateKey(clientPrivateKeyPath);
+		EVP_PKEY *privateKey = LoadKey::LoadPrivateKey(FilePaths::clientPrivateKeyPath);
 		message = Decrypt::decryptDataRSA(privateKey, message);
 
 		Decode::deserializeKeyAndIV(message, key, keySize, iv, ivSize);
@@ -133,43 +129,8 @@ private:
 		std::cout << "New key has been set" << std::endl;
 	}
 
-	// static bool enterServerPassword(SSL *ssl, const std::string &message)
-	// {
-	// 	EVP_PKEY *serverPublicKey = LoadKey::LoadPublicKey(serverPublicKeyPath);
-
-	// 	if (!serverPublicKey)
-	// 	{
-	// 		std::cout << "Cannot load server's public key. Exiting." << std::endl;
-	// 		raise(SIGINT);
-	// 	}
-
-	// 	std::string password;
-	// 	std::getline(std::cin, password);
-
-	// 	std::string encryptedPassword = Encode::base64Encode(Encrypt::encryptDataRSA(serverPublicKey, password));
-
-	// 	EVP_PKEY_free(serverPublicKey);
-
-	// 	if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, encryptedPassword.c_str(), encryptedPassword.size()))
-	// 		raise(SIGINT);
-
-	// 	std::cout << "Verifying password.." << std::endl;
-
-	// 	std::string passwordVerification;
-
-	// 	if ((passwordVerification = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
-	// 		raise(SIGINT);
-
-	// 	printSignalMessage(Signals::SignalManager::getSignalTypeFromMessage(passwordVerification), message);
-
-	// 	if (Signals::SignalManager::getSignalTypeFromMessage(passwordVerification) != Signals::SignalType::CORRECTPASSWORD)
-	// 		raise(SIGINT);
-
-	// 	return true;
-	// };
-
 public:
-	HandleSignal(Signals::SignalType signalType, std::string &message, CryptoPP::byte *key, size_t keySize, CryptoPP::byte *iv, size_t ivSize)
+	HandleSignal(Signals::SignalType signalType, std::string &message, CryptoPP::byte *key = NULLPTR, size_t keySize = 0, CryptoPP::byte *iv = NULLPTR, size_t ivSize = 0, SSL *ssl = NULLPTR)
 	{
 		switch (signalType)
 		{
@@ -180,8 +141,6 @@ public:
 		case Signals::SignalType::CORRECTPASSWORD:
 			printSignalMessage(signalType, message);
 			break;
-		case Signals::SignalType::KEYLOADERR:
-		case Signals::SignalType::KEYEXISTERR:
 		case Signals::SignalType::INCORRECTPASSWORD:
 		case Signals::SignalType::NAMEEXISTSERR:
 		case Signals::SignalType::RATELIMITED:
@@ -193,7 +152,7 @@ public:
 			raise(SIGINT); // handled by the shutdownHandler
 			break;
 		case Signals::SignalType::PASSWORDNEEDED:
-			// enterServerPassword(ssl, message); // come back to this later when implementing it
+			// Validate::Client::sendServerPassword(ssl);
 			break;
 		case Signals::SignalType::NEWAESKEY:
 			setNewAesKey(message, key, keySize, iv, ivSize);

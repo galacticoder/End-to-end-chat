@@ -105,6 +105,8 @@ public:
 		BIO_free_all(bio);
 		EVP_PKEY_free(pkey);
 		X509_free(x509);
+
+		std::cout << "Generated cert and private key" << std::endl;
 	}
 
 	static void generateRSAKeys(const std::string &privateKeyFile, const std::string &publicKeyFile, int bits = KEYSIZE)
@@ -150,6 +152,8 @@ public:
 		BIO_free_all(publicKeyBio);
 
 		EVP_PKEY_free(pkey);
+
+		std::cout << "Generated RSA Keys" << std::endl;
 	}
 
 	static void generateKeyAESGCM(CryptoPP::byte *key, CryptoPP::byte *iv)
