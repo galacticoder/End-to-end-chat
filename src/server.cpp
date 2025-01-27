@@ -33,7 +33,7 @@ void handleClient(SSL *ssl, int &clientSocket)
 		return;
 	}
 
-	if (!Validate::Server::checkClientUsernameValidity(ssl, clientUsername))
+	if (!Validate::checkClientUsernameValidity(ssl, clientUsername))
 	{
 		CleanUp::Server::cleanUpClient(ssl, clientSocket, clientUsername);
 		return;
@@ -67,9 +67,29 @@ void handleClient(SSL *ssl, int &clientSocket)
 		if ((message = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
 		{
 			CleanUp::Server::cleanUpClient(ssl, clientSocket, clientUsername);
+			std::string exitMessage = fmt::format("{} has left the chat", clientUsername);
+			for (auto const &[key, val] : ServerStorage::clientPublicKeys)
+			{
+				std::string filePath = "temp.pem";
+				SaveFile temp(filePath, val, std::ios::binary);
+				EVP_PKEY *loadKey = LoadKey::LoadPublicKey(filePath);
+				std::string encryptedExitMessage = Encrypt::encryptDataRSA(loadKey, exitMessage);
+				EVP_PKEY_free(loadKey);
+				encryptedExitMessage = Encode::base64Encode(encryptedExitMessage);
+				encryptedExitMessage.append(Signals::SignalManager::getSignalAsString(Signals::SignalType::SERVERMESSAGE));
+				std::cout << "msg exit: " << encryptedExitMessage << std::endl;
+				std::cout << "size: " << ServerStorage::clientSSLSockets.size() << std::endl;
+				for (SSL *socket : ServerStorage::clientSSLSockets)
+				{
+					if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(socket, encryptedExitMessage.data(), encryptedExitMessage.size()))
+						return;
+				}
+			}
 			return;
 		}
 
+		message.append(fmt::format("|{}", clientUsername));
+		message.append(Signals::SignalManager::getSignalAsString(Signals::SignalType::CLIENTMESSAGE));
 		std::cout << "Client message: " << message << std::endl;
 
 		if (!Send::Server::broadcastMessage(ssl, message))
@@ -129,7 +149,7 @@ int main()
 			continue;
 		}
 
-		if (!Validate::Server::handleClientPreChecks(ssl))
+		if (!Validate::handleClientPreChecks(ssl))
 		{
 			CleanUp::Server::cleanUpClient(ssl, clientSocket);
 			continue;

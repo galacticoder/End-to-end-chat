@@ -28,6 +28,8 @@ void receiveMessages(SSL *ssl)
 	{
 		std::string message;
 
+		std::cout << "msg received" << std::endl;
+
 		if ((message = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
 		{
 			std::cout << "Server killed" << std::endl;
@@ -85,7 +87,7 @@ void communicateWithServer(SSL *ssl)
 
 	std::string serializedKeyAndIv = Encode::serializeKeyAndIV(key, sizeof(key), iv, sizeof(iv));
 
-	if (!Send::Client::sendEncryptedAESKey(ssl, serializedKeyAndIv, amountOfKeys))
+	if (!Send::Client::sendEncryptedAESKey(ssl, serializedKeyAndIv, amountOfKeys, Signals::SignalManager::getSignalAsString(Signals::SignalType::NEWAESKEY)))
 	{
 		CleanUp::Client::cleanUpClient();
 		return;
@@ -98,6 +100,9 @@ void communicateWithServer(SSL *ssl)
 	{
 		std::string message;
 		std::getline(std::cin, message);
+
+		std::cout << "\033[A";
+		std::cout << fmt::format("{}: {}", username, message) << std::endl;
 
 		if (message.empty())
 			continue;
@@ -157,15 +162,11 @@ int main()
 		if ((serverPublicKey = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
 			CleanUp::Client::cleanUpClient();
 
-		std::cout << "Server piub keuy :"
-				  << serverPublicKey << std::endl;
 		SaveFile savePubKey(FilePaths::clientServerPublicKeyPath, serverPublicKey, std::ios::binary);
 
 		std::string getSignalString;
 		if ((getSignalString = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
 			CleanUp::Client::cleanUpClient();
-
-		std::cout << "this 1: " << getSignalString << std::endl;
 
 		Signals::SignalType getSignal = Signals::SignalManager::getSignalTypeFromMessage(getSignalString);
 		HandleSignal(getSignal, getSignalString);

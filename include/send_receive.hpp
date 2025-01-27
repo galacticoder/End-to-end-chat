@@ -1,7 +1,6 @@
 #pragma once
 
 #include <iostream>
-#include "signals.hpp"
 #include "encryption.hpp"
 #include "file_handling.hpp"
 #include "keys.hpp"
@@ -86,7 +85,7 @@ public:
 	class Client
 	{
 	public:
-		static bool sendEncryptedAESKey(SSL *ssl, std::string &aesKey, int &amountOfKeys)
+		static bool sendEncryptedAESKey(SSL *ssl, std::string &aesKey, int &amountOfKeys, const std::string &signalString)
 		{
 			std::cout << "Sending encrypted aes key" << std::endl;
 			if (!sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, std::to_string(amountOfKeys).data(), std::to_string(amountOfKeys).size()))
@@ -106,7 +105,7 @@ public:
 
 				std::string encryptedAesKey = (Encode::base64Encode(Encrypt::encryptDataRSA(loadedPublicKey, aesKey)));
 
-				encryptedAesKey.append(Signals::SignalManager::getSignalAsString(Signals::SignalType::NEWAESKEY));
+				encryptedAesKey.append(signalString);
 				encryptedAesKey.append(fmt::format(":{}", i - 1));
 
 				if (!sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, encryptedAesKey.data(), encryptedAesKey.size()))

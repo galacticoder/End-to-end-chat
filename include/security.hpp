@@ -10,137 +10,103 @@
 
 class Validate
 {
-public:
-	class Server
+private:
+	static bool checkServerUserLimit(SSL *ssl)
 	{
-	private:
-		static bool checkServerUserLimit(SSL *ssl)
-		{
-			std::string signalMessage;
+		std::string signalMessage;
 
-			if (ServerStorage::clientSSLSockets.size() >= ServerConfig::SERVER_USER_LIMIT)
-				signalMessage = Signals::SignalManager::getSignalMessageWithSignalStringAppended(Signals::SignalType::SERVERLIMIT);
+		if (ServerStorage::clientSSLSockets.size() >= ServerConfig::SERVER_USER_LIMIT)
+			signalMessage = Signals::SignalManager::getSignalMessageWithSignalStringAppended(Signals::SignalType::SERVERLIMIT);
 
-			Signals::SignalManager::printSignalServerMessage(Signals::SignalManager::getSignalTypeFromMessage(signalMessage));
+		Signals::SignalManager::printSignalServerMessage(Signals::SignalManager::getSignalTypeFromMessage(signalMessage));
 
-			if (!signalMessage.empty())
-				if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, signalMessage.data(), signalMessage.size()))
-					return false;
-
-			return signalMessage.empty() ? true : false;
-		}
-
-		static bool checkAndVerifyServerPassword(SSL *ssl)
-		{
-			std::string signalMessage = Signals::SignalManager::getSignalMessageWithSignalStringAppended(ServerConfig::SERVER_HASHED_PASSWORD.empty() ? Signals::SignalType::PASSWORDNOTNEEDED : Signals::SignalType::PASSWORDNEEDED);
-
-			Signals::SignalManager::printSignalServerMessage(Signals::SignalManager::getSignalTypeFromMessage(signalMessage));
-
+		if (!signalMessage.empty())
 			if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, signalMessage.data(), signalMessage.size()))
 				return false;
 
-			if (ServerConfig::SERVER_HASHED_PASSWORD.empty() && !ServerConfig::PASSWORD_REQUIRED) // check if server even has a password then it exits with true if not
-				return true;
+		return signalMessage.empty() ? true : false;
+	}
 
-			std::string receivedPassword;
-			if ((receivedPassword = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
-				return false;
+	static bool checkAndVerifyServerPassword(SSL *ssl)
+	{
+		std::string signalMessage = Signals::SignalManager::getSignalMessageWithSignalStringAppended(ServerConfig::SERVER_HASHED_PASSWORD.empty() ? Signals::SignalType::PASSWORDNOTNEEDED : Signals::SignalType::PASSWORDNEEDED);
 
-			std::cout << "Hashed password received: " << receivedPassword << std::endl;
+		Signals::SignalManager::printSignalServerMessage(Signals::SignalManager::getSignalTypeFromMessage(signalMessage));
 
-			EVP_PKEY *serverPrivateKey = LoadKey::LoadPrivateKey(FilePaths::serverPrivateKeyPath);
+		if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, signalMessage.data(), signalMessage.size()))
+			return false;
 
-			if (!serverPrivateKey)
-				return false;
-
-			receivedPassword = Decrypt::decryptDataRSA(serverPrivateKey, Decode::base64Decode(receivedPassword));
-
-			EVP_PKEY_free(serverPrivateKey);
-
-			std::cout << "Validating password sent by client" << std::endl;
-
-			if (!bcrypt::validatePassword(receivedPassword, ServerConfig::SERVER_HASHED_PASSWORD))
-				signalMessage = Signals::SignalManager::getSignalMessageWithSignalStringAppended(Signals::SignalType::INCORRECTPASSWORD);
-			else
-				signalMessage = Signals::SignalManager::getSignalMessageWithSignalStringAppended(Signals::SignalType::CORRECTPASSWORD);
-
-			Signals::SignalManager::printSignalServerMessage(Signals::SignalManager::getSignalTypeFromMessage(signalMessage));
-
-			if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, signalMessage.data(), signalMessage.size()))
-				return false;
-
-			return Signals::SignalManager::getSignalTypeFromMessage(signalMessage) == Signals::SignalType::INCORRECTPASSWORD ? false : true;
-		}
-
-	public:
-		static bool checkClientUsernameValidity(SSL *ssl, const std::string &clientUsername)
-		{
-			std::string signalMessage;
-
-			// checks if username already exists
-			if (ServerStorage::clientPublicKeys.find(clientUsername) != ServerStorage::clientPublicKeys.end())
-				signalMessage = Signals::SignalManager::getSignalMessageWithSignalStringAppended(Signals::SignalType::NAMEEXISTSERR);
-
-			// check if client username is invalid in length
-			if (clientUsername.size() <= ServerConfig::MIN_USERNAME_LENGTH || clientUsername.size() > ServerConfig::MAX_USERNAME_LENGTH)
-				signalMessage = Signals::SignalManager::getSignalMessageWithSignalStringAppended(Signals::SignalType::INVALIDNAMELENGTH);
-
-			// check if client username contains unallowed characters
-			for (char i : clientUsername)
-				if (ServerConfig::UNALLOWED_CHARACTERS.find(i) != std::string::npos)
-					signalMessage = Signals::SignalManager::getSignalMessageWithSignalStringAppended(Signals::SignalType::INVALIDNAME);
-
-			if (signalMessage.empty())
-				signalMessage = Signals::SignalManager::getSignalMessageWithSignalStringAppended(Signals::SignalType::UNKNOWN);
-
-			Signals::SignalManager::printSignalServerMessage(Signals::SignalManager::getSignalTypeFromMessage(signalMessage));
-
-			if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, signalMessage.data(), signalMessage.size()))
-				return false;
-
-			return Signals::SignalManager::getSignalTypeFromMessage(signalMessage) == Signals::SignalType::UNKNOWN ? true : false;
-		}
-
-		static bool handleClientPreChecks(SSL *ssl)
-		{
-			if (!checkServerUserLimit(ssl))
-				return false;
-			if (!checkAndVerifyServerPassword(ssl))
-				return false;
-
+		if (ServerConfig::SERVER_HASHED_PASSWORD.empty() && !ServerConfig::PASSWORD_REQUIRED) // check if server even has a password then it exits with true if not
 			return true;
-		}
-	};
 
-	class Client
+		std::string receivedPassword;
+		if ((receivedPassword = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
+			return false;
+
+		std::cout << "Hashed password received: " << receivedPassword << std::endl;
+
+		EVP_PKEY *serverPrivateKey = LoadKey::LoadPrivateKey(FilePaths::serverPrivateKeyPath);
+
+		if (!serverPrivateKey)
+			return false;
+
+		receivedPassword = Decrypt::decryptDataRSA(serverPrivateKey, Decode::base64Decode(receivedPassword));
+
+		EVP_PKEY_free(serverPrivateKey);
+
+		std::cout << "Validating password sent by client" << std::endl;
+
+		if (!bcrypt::validatePassword(receivedPassword, ServerConfig::SERVER_HASHED_PASSWORD))
+			signalMessage = Signals::SignalManager::getSignalMessageWithSignalStringAppended(Signals::SignalType::INCORRECTPASSWORD);
+		else
+			signalMessage = Signals::SignalManager::getSignalMessageWithSignalStringAppended(Signals::SignalType::CORRECTPASSWORD);
+
+		Signals::SignalManager::printSignalServerMessage(Signals::SignalManager::getSignalTypeFromMessage(signalMessage));
+
+		if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, signalMessage.data(), signalMessage.size()))
+			return false;
+
+		return Signals::SignalManager::getSignalTypeFromMessage(signalMessage) == Signals::SignalType::INCORRECTPASSWORD ? false : true;
+	}
+
+public:
+	static bool checkClientUsernameValidity(SSL *ssl, const std::string &clientUsername)
 	{
-	public:
-		static void sendServerPassword(SSL *ssl)
-		{
-			EVP_PKEY *serverPublicKey = LoadKey::LoadPublicKey(FilePaths::clientServerPublicKeyPath);
+		std::string signalMessage;
 
-			if (!serverPublicKey)
-				raise(SIGINT);
+		// checks if username already exists
+		if (ServerStorage::clientPublicKeys.find(clientUsername) != ServerStorage::clientPublicKeys.end())
+			signalMessage = Signals::SignalManager::getSignalMessageWithSignalStringAppended(Signals::SignalType::NAMEEXISTSERR);
 
-			std::string password;
-			std::getline(std::cin, password);
+		// check if client username is invalid in length
+		if (clientUsername.size() <= ServerConfig::MIN_USERNAME_LENGTH || clientUsername.size() > ServerConfig::MAX_USERNAME_LENGTH)
+			signalMessage = Signals::SignalManager::getSignalMessageWithSignalStringAppended(Signals::SignalType::INVALIDNAMELENGTH);
 
-			password = Encode::base64Encode(Encrypt::encryptDataRSA(serverPublicKey, bcrypt::generateHash(password)));
+		// check if client username contains unallowed characters
+		for (char i : clientUsername)
+			if (ServerConfig::UNALLOWED_CHARACTERS.find(i) != std::string::npos)
+				signalMessage = Signals::SignalManager::getSignalMessageWithSignalStringAppended(Signals::SignalType::INVALIDNAME);
 
-			EVP_PKEY_free(serverPublicKey);
+		if (signalMessage.empty())
+			signalMessage = Signals::SignalManager::getSignalMessageWithSignalStringAppended(Signals::SignalType::UNKNOWN);
 
-			if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, password.data(), password.size()))
-				raise(SIGINT);
+		Signals::SignalManager::printSignalServerMessage(Signals::SignalManager::getSignalTypeFromMessage(signalMessage));
 
-			std::cout << "Verifying password.." << std::endl;
+		if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, signalMessage.data(), signalMessage.size()))
+			return false;
 
-			std::string isPasswordVerified;
-			if ((isPasswordVerified = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
-				raise(SIGINT);
+		return Signals::SignalManager::getSignalTypeFromMessage(signalMessage) == Signals::SignalType::UNKNOWN ? true : false;
+	}
 
-			HandleSignal(Signals::SignalManager::getSignalTypeFromMessage(isPasswordVerified), isPasswordVerified, NULLPTR, 0, NULLPTR, 0, ssl);
-		}
-	};
+	static bool handleClientPreChecks(SSL *ssl)
+	{
+		if (!checkServerUserLimit(ssl))
+			return false;
+		if (!checkAndVerifyServerPassword(ssl))
+			return false;
+
+		return true;
+	}
 };
 
 class SetServerPassword
