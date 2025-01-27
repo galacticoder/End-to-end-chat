@@ -142,7 +142,7 @@ int main()
 		if (ctx)
 			SSL_CTX_free(ctx);
 
-		DeletePath deleteKeysDirectory(FilePaths::keysDirectory);
+		// DeletePath deleteKeysDirectory(FilePaths::keysDirectory);
 		DeletePath deleteReceivedKeysDirectory(FilePaths::receivedKeysDirectory);
 		_exit(signal); // seg fault here
 	};
@@ -168,13 +168,6 @@ int main()
 		std::cout << "this 1: " << getSignalString << std::endl;
 
 		Signals::SignalType getSignal = Signals::SignalManager::getSignalTypeFromMessage(getSignalString);
-		HandleSignal(getSignal, getSignalString);
-
-		if ((getSignalString = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
-			CleanUp::Client::cleanUpClient();
-
-		std::cout << "this 2: " << getSignalString << std::endl;
-		getSignal = Signals::SignalManager::getSignalTypeFromMessage(getSignalString);
 		HandleSignal(getSignal, getSignalString);
 
 		communicateWithServer(ssl);

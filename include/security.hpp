@@ -20,13 +20,12 @@ public:
 
 			if (ServerStorage::clientSSLSockets.size() >= ServerConfig::SERVER_USER_LIMIT)
 				signalMessage = Signals::SignalManager::getSignalMessageWithSignalStringAppended(Signals::SignalType::SERVERLIMIT);
-			else
-				signalMessage = Signals::SignalManager::getSignalMessageWithSignalStringAppended(Signals::SignalType::UNKNOWN);
 
 			Signals::SignalManager::printSignalServerMessage(Signals::SignalManager::getSignalTypeFromMessage(signalMessage));
 
-			if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, signalMessage.data(), signalMessage.size()))
-				return false;
+			if (!signalMessage.empty())
+				if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, signalMessage.data(), signalMessage.size()))
+					return false;
 
 			return signalMessage.empty() ? true : false;
 		}

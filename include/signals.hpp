@@ -35,7 +35,7 @@ namespace Signals
 		static inline std::vector<std::string> signalStringsVector = {
 			"CORRECTPASSWORD", "INCORRECTPASSWORD", "NAMEEXISTSERR", "RATELIMITED", "USERLIMITREACHED", "PASSWORDNEEDED", "PASSWORDNOTNEEDED", "INVALIDNAMECHARS", "INVALIDNAMELENGTH", "BLACKLISTED", "NEWAESKEY", "UNKNOWN"};
 
-		static inline std::vector<std::string> serverSidePrintSignalMessageVector = {"Client entered the correct server password.", "Client entered incorrect server password.", "Client attempted to join with username that already exists.", "Client attempted to join while rate limited.", "Client attempted to join past server user limit set.", "Sent client password needed signal. Waiting for password...", "Server set without password.", "Client username contains invalid characters.", "Client username is an invalid length.", "Blacklisted client attempted to join server.", "", ""};
+		static inline std::vector<std::string> serverSidePrintSignalMessageVector = {"Client entered the correct server password.", "Client entered incorrect server password.", "Client attempted to join with username that already exists.", "Client attempted to join while rate limited.", "Client attempted to join past server user limit set.", "Sent client password needed signal. Waiting for password...", "Server set without password.", "Client username contains invalid characters.", "Client username is an invalid length.", "Blacklisted client attempted to join server."};
 
 		static inline std::vector<std::string> serverMessages = {
 			"Correct password entered.", "Wrong password. You have been kicked.", "Username already exists on server.", "Rate limit reached. Try again later.", "User limit reached. Exiting.", "Enter the server password to join.", "Welcome to the server.", "Username contains invalid characters.", "Username is an invalid length", "You are blacklisted from the server.", "", ""};
@@ -53,7 +53,8 @@ namespace Signals
 			if (static_cast<size_t>(signalType) < serverSidePrintSignalMessageVector.size())
 				std::cout << serverSidePrintSignalMessageVector[static_cast<size_t>(signalType)] << std::endl;
 
-			std::cerr << fmt::format("Invalid signal type: {}", static_cast<int>(signalType)) << std::endl;
+			if (static_cast<size_t>(signalType) > signalStringsVector.size())
+				std::cerr << fmt::format("[{}] Invalid signal type: {}", __FUNCTION__, static_cast<int>(signalType)) << std::endl;
 		}
 
 		static std::string getSignalMessage(SignalType signalType)
