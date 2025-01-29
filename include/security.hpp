@@ -15,7 +15,7 @@ private:
 	{
 		std::string signalMessage;
 
-		if (ServerStorage::clientSSLSockets.size() >= ServerConfig::SERVER_USER_LIMIT)
+		if (ClientManagement::clientSSLSockets.size() >= ServerConfig::SERVER_USER_LIMIT)
 			signalMessage = Signals::SignalManager::getSignalMessageWithSignalStringAppended(Signals::SignalType::SERVERLIMIT);
 
 		Signals::SignalManager::printSignalServerMessage(Signals::SignalManager::getSignalTypeFromMessage(signalMessage));
@@ -75,7 +75,7 @@ public:
 		std::string signalMessage;
 
 		// checks if username already exists
-		if (ServerStorage::clientPublicKeys.find(clientUsername) != ServerStorage::clientPublicKeys.end())
+		if (ClientManagement::clientPublicKeys.find(clientUsername) != ClientManagement::clientPublicKeys.end())
 			signalMessage = Signals::SignalManager::getSignalMessageWithSignalStringAppended(Signals::SignalType::NAMEEXISTSERR);
 
 		// check if client username is invalid in length

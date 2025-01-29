@@ -62,6 +62,27 @@ namespace Send
 			return true;
 		}
 
+		static void broadcastClientExitMessage(SSL *ssl, const std::string &clientUsername, std::map<std::string, std::string> &clientPublicKeys, std::vector<SSL *> &clientSSLSockets, const std::string &signalString)
+		{
+			std::string exitMessage = fmt::format("{} has left the chat", clientUsername);
+			for (auto const &[key, val] : clientPublicKeys)
+			{
+				if (key != clientUsername)
+				{
+					EVP_PKEY *loadKey = LoadKey::loadPublicKeyInMemory(val);
+
+					std::string encryptedExitMessage = Encode::base64Encode(Encrypt::encryptDataRSA(loadKey, exitMessage)).append(signalString);
+
+					EVP_PKEY_free(loadKey);
+
+					for (SSL *socket : clientSSLSockets)
+						if (socket != ssl)
+							if (!sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(socket, encryptedExitMessage.data(), encryptedExitMessage.size()))
+								return;
+				}
+			}
+		}
+
 		static bool sendAllPublicKeys(SSL *ssl, const std::string &currentClientUsername, std::map<std::string, std::string> &clientPublicKeys)
 		{
 			std::string amountOfUsers = std::to_string(clientPublicKeys.size() - 1); // -1 for the current user

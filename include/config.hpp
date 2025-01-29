@@ -4,7 +4,7 @@
 #include <vector>
 #include <openssl/ssl.h>
 
-class ServerStorage
+class ClientManagement
 {
 public:
 	static inline std::vector<SSL *> clientSSLSockets;
@@ -19,5 +19,5 @@ public:
 	static inline size_t MIN_USERNAME_LENGTH = 3;
 	static inline bool PASSWORD_REQUIRED;
 	static inline std::string SERVER_HASHED_PASSWORD;
-	static inline std::string UNALLOWED_CHARACTERS = "/\\{}|.,()~`";
+	static inline std::string UNALLOWED_CHARACTERS = "/\\{}|.,()~` ";
 };

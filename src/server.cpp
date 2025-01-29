@@ -24,7 +24,7 @@ void signalHandle(int signal) { shutdownHandler(signal); }
 
 void handleClient(SSL *ssl, int &clientSocket)
 {
-	ServerStorage::clientSSLSockets.push_back(ssl);
+	ClientManagement::clientSSLSockets.push_back(ssl);
 
 	std::string clientUsername;
 	if ((clientUsername = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
@@ -46,16 +46,16 @@ void handleClient(SSL *ssl, int &clientSocket)
 		return;
 	}
 
-	ServerStorage::clientPublicKeys[clientUsername] = clientPublicKey;
+	ClientManagement::clientPublicKeys[clientUsername] = clientPublicKey;
 	std::cout << "Public key: " << clientPublicKey << std::endl;
 
-	if (!Send::Server::sendAllPublicKeys(ssl, clientUsername, ServerStorage::clientPublicKeys))
+	if (!Send::Server::sendAllPublicKeys(ssl, clientUsername, ClientManagement::clientPublicKeys))
 	{
 		CleanUp::Server::cleanUpClient(ssl, clientSocket, clientUsername);
 		return;
 	}
 
-	if (!Receive::Server::receiveAndSendEncryptedAesKey(ssl, ServerStorage::clientPublicKeys, ServerStorage::clientSSLSockets))
+	if (!Receive::Server::receiveAndSendEncryptedAesKey(ssl, ClientManagement::clientPublicKeys, ClientManagement::clientSSLSockets))
 	{
 		CleanUp::Server::cleanUpClient(ssl, clientSocket, clientUsername);
 		return;
@@ -66,7 +66,7 @@ void handleClient(SSL *ssl, int &clientSocket)
 		std::string message;
 		if ((message = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
 		{
-			// Send::BroadcastExitMessage(ssl, clientUsername);
+			Send::Server::broadcastClientExitMessage(ssl, clientUsername, ClientManagement::clientPublicKeys, ClientManagement::clientSSLSockets, Signals::SignalManager::getSignalAsString(Signals::SignalType::SERVERMESSAGE));
 			CleanUp::Server::cleanUpClient(ssl, clientSocket, clientUsername);
 			return;
 		}
@@ -75,7 +75,7 @@ void handleClient(SSL *ssl, int &clientSocket)
 		message.append(Signals::SignalManager::getSignalAsString(Signals::SignalType::CLIENTMESSAGE));
 		std::cout << "Client message: " << message << std::endl;
 
-		if (!Send::Server::broadcastMessageToClients(ssl, message, ServerStorage::clientSSLSockets))
+		if (!Send::Server::broadcastMessageToClients(ssl, message, ClientManagement::clientSSLSockets))
 		{
 			CleanUp::Server::cleanUpClient(ssl, clientSocket, clientUsername);
 			return;

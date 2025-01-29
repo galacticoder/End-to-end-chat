@@ -29,14 +29,14 @@ public:
 				SSL_free(ssl);
 			}
 
-			auto sslSocketIndex = std::remove(ServerStorage::clientSSLSockets.begin(), ServerStorage::clientSSLSockets.end(), ssl);
+			auto sslSocketIndex = std::remove(ClientManagement::clientSSLSockets.begin(), ClientManagement::clientSSLSockets.end(), ssl);
 
-			std::cout << "ServerStorage::clientSSLSockets size before: " << ServerStorage::clientSSLSockets.size() << std::endl;
+			std::cout << "ClientManagement::clientSSLSockets size before: " << ClientManagement::clientSSLSockets.size() << std::endl;
 
-			if (sslSocketIndex != ServerStorage::clientSSLSockets.end())
-				ServerStorage::clientSSLSockets.erase(sslSocketIndex, ServerStorage::clientSSLSockets.end());
+			if (sslSocketIndex != ClientManagement::clientSSLSockets.end())
+				ClientManagement::clientSSLSockets.erase(sslSocketIndex, ClientManagement::clientSSLSockets.end());
 
-			std::cout << "ServerStorage::clientSSLSockets size after: " << ServerStorage::clientSSLSockets.size() << std::endl;
+			std::cout << "ClientManagement::clientSSLSockets size after: " << ClientManagement::clientSSLSockets.size() << std::endl;
 		}
 
 		static void deleteUserPublicKey(std::string &clientUsername)
@@ -44,14 +44,14 @@ public:
 			if (clientUsername.empty())
 				return;
 
-			std::cout << "ServerStorage::clientPublicKeys size before: " << ServerStorage::clientPublicKeys.size() << std::endl;
+			std::cout << "ClientManagement::clientPublicKeys size before: " << ClientManagement::clientPublicKeys.size() << std::endl;
 
-			auto it = ServerStorage::clientPublicKeys.find(clientUsername);
+			auto it = ClientManagement::clientPublicKeys.find(clientUsername);
 
-			if (it != ServerStorage::clientPublicKeys.end())
-				ServerStorage::clientPublicKeys.erase(it);
+			if (it != ClientManagement::clientPublicKeys.end())
+				ClientManagement::clientPublicKeys.erase(it);
 
-			std::cout << "ServerStorage::clientPublicKeys size after: " << ServerStorage::clientPublicKeys.size() << std::endl;
+			std::cout << "ClientManagement::clientPublicKeys size after: " << ClientManagement::clientPublicKeys.size() << std::endl;
 		}
 
 	public:
