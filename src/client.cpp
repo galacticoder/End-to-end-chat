@@ -22,15 +22,14 @@ void signalHandle(int signal) { shutdownHandler(signal); }
 CryptoPP::byte key[CryptoPP::AES::MAX_KEYLENGTH]; // 32 bytes
 CryptoPP::byte iv[CryptoPP::AES::BLOCKSIZE];	  // 16 bytes
 
+std::vector<std::string> publicKeys;
+
 void receiveMessages(SSL *ssl)
 {
 	while (true)
 	{
 		std::string message;
-
-		std::cout << "msg received" << std::endl;
-
-		if ((message = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
+		if (message = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl); message.empty())
 		{
 			std::cout << "Server killed" << std::endl;
 			CleanUp::Client::cleanUpClient();
@@ -58,7 +57,7 @@ void communicateWithServer(SSL *ssl)
 		return;
 
 	std::string validateUsername;
-	if ((validateUsername = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
+	if (validateUsername = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl); validateUsername.empty())
 	{
 		CleanUp::Client::cleanUpClient();
 		return;
@@ -74,20 +73,21 @@ void communicateWithServer(SSL *ssl)
 	if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, publicKeyData.data(), publicKeyData.size()))
 		return;
 
-	int amountOfKeys;
-	if (!Receive::Client::receiveAllPublicKeys(ssl, &amountOfKeys))
-	{
-		CleanUp::Client::cleanUpClient();
-		return;
-	}
-
 	CryptoPP::GCM<CryptoPP::AES>::Encryption setKey;
 	GenerateKeys::generateKeyAESGCM(key, iv);
 	setKey.SetKeyWithIV(key, sizeof(key), iv, sizeof(iv));
 
 	std::string serializedKeyAndIv = Encode::serializeKeyAndIV(key, sizeof(key), iv, sizeof(iv));
 
-	if (!Send::Client::sendEncryptedAESKey(ssl, serializedKeyAndIv, amountOfKeys, Signals::SignalManager::getSignalAsString(Signals::SignalType::NEWAESKEY)))
+	int amountOfKeys;
+
+	if (!Receive::Client::receiveAllRSAPublicKeys(ssl, publicKeys, &amountOfKeys))
+	{
+		CleanUp::Client::cleanUpClient();
+		return;
+	}
+
+	if (!Send::Client::sendEncryptedAESKey(ssl, serializedKeyAndIv, Signals::SignalManager::getSignalAsString(Signals::SignalType::NEWAESKEY), publicKeys, amountOfKeys))
 	{
 		CleanUp::Client::cleanUpClient();
 		return;

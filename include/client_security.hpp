@@ -14,7 +14,7 @@ class ClientValidation
 public:
 	static void sendServerPassword(SSL *ssl)
 	{
-		EVP_PKEY *serverPublicKey = LoadKey::LoadPublicKey(FilePaths::clientServerPublicKeyPath);
+		EVP_PKEY *serverPublicKey = LoadKey::loadPublicKey(FilePaths::clientServerPublicKeyPath);
 
 		if (!serverPublicKey)
 			raise(SIGINT);

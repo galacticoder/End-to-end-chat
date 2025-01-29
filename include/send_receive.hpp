@@ -2,26 +2,22 @@
 
 #include <iostream>
 #include "encryption.hpp"
-#include "file_handling.hpp"
 #include "keys.hpp"
-#include "config.hpp"
 
-#define WRAP_STRING_LITERAL(str) ([]() constexpr { return StringLiteral<sizeof(str)>(str); }())
+#define WRAP_STRING_LITERAL(str) ([] { return StringLiteral<sizeof(str)>(str); }())
 
 template <size_t N>
 struct StringLiteral
 {
-	constexpr StringLiteral(const char (&str)[N])
+	constexpr StringLiteral(const char (&str)[N]) : value{}
 	{
-		std::copy_n(str, N, value);
+		std::copy(str, str + N, value.begin());
 	}
-
-	char value[N];
+	std::array<char, N> value;
 };
 
-class Send
+namespace SSLerrors
 {
-protected:
 	static void printSSLError(int sslError)
 	{
 		char buffer[256];
@@ -29,84 +25,76 @@ protected:
 		std::cerr << "SSL Error: " << buffer << std::endl;
 	}
 
-public:
+	static bool checkBytesError(SSL *ssl, int &bytes, const std::string &file, int line, std::string operation)
+	{
+		if (bytes <= 0)
+		{
+			int sslError = SSL_get_error(ssl, bytes);
+			std::cerr << fmt::format("[{}]:[{}] SSL_{} failed: ", file, line, operation);
+			SSLerrors::printSSLError(sslError);
+			return false;
+		}
+		return true;
+	}
+
+}
+
+namespace Send
+{
 	template <StringLiteral file, int line>
 	static bool sendMessage(SSL *ssl, const char *data, int length)
 	{
 		int bytesWritten = SSL_write(ssl, data, length);
-		if (bytesWritten <= 0)
-		{
-			int sslError = SSL_get_error(ssl, bytesWritten);
-			std::cerr << fmt::format("[{}]:[{}] SSL_write failed: ", file.value, line);
-			printSSLError(sslError);
+		if (!SSLerrors::checkBytesError(ssl, bytesWritten, std::string(file.value.data()), line, "write"))
 			return false;
-		}
-
 		return true;
 	}
 
-	class Server
+	struct Server
 	{
-	public:
-		static bool broadcastMessage(SSL *ssl, std::string &message)
+		static bool broadcastMessageToClients(SSL *ssl, std::string &message, std::vector<SSL *> &clientSSLSockets)
 		{
 			std::cout << "Broadcasting message: " << message << std::endl;
-			for (SSL *socket : ServerStorage::clientSSLSockets)
+			for (SSL *socket : clientSSLSockets)
 				if (socket != ssl)
 					if (!sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(socket, message.data(), message.size()))
 						return false;
-
 			return true;
 		}
 
-		static bool sendAllPublicKeys(SSL *ssl, const std::string &username)
+		static bool sendAllPublicKeys(SSL *ssl, const std::string &currentClientUsername, std::map<std::string, std::string> &clientPublicKeys)
 		{
-			std::string amountOfUsers = std::to_string(ServerStorage::clientPublicKeys.size() - 1); // -1 for the current user
+			std::string amountOfUsers = std::to_string(clientPublicKeys.size() - 1); // -1 for the current user
 
 			if (!sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, amountOfUsers.c_str(), amountOfUsers.size()))
 				return false;
 
-			if (ServerStorage::clientPublicKeys.size() <= 1)
-			{
-				std::cout << fmt::format("Skipping sending all public keys, Only {} public key in public keys map", ServerStorage::clientPublicKeys.size()) << std::endl;
+			if (clientPublicKeys.size() <= 1)
 				return true;
-			}
 
-			for (auto const &[key, val] : ServerStorage::clientPublicKeys)
-				if (key != username)
+			for (auto const &[key, val] : clientPublicKeys)
+				if (key != currentClientUsername)
 					if (!sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, val.c_str(), val.size()))
 						return false;
 
-			std::cout << "Sent all public keys" << std::endl;
 			return true;
 		}
 	};
 
-	class Client
+	struct Client
 	{
-	public:
-		static bool sendEncryptedAESKey(SSL *ssl, std::string &aesKey, int &amountOfKeys, const std::string &signalString)
+		static bool sendEncryptedAESKey(SSL *ssl, std::string &aesKey, const std::string &signalString, std::vector<std::string> &publicKeys, int &amountOfUsers)
 		{
-			std::cout << "Sending encrypted aes key" << std::endl;
-			if (!sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, std::to_string(amountOfKeys).data(), std::to_string(amountOfKeys).size()))
+			if (!sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, std::to_string(amountOfUsers).data(), std::to_string(amountOfUsers).size()))
 				return false;
 
-			if (amountOfKeys <= 0)
-			{
-				std::cout << "No other users to send key to." << std::endl;
+			if (amountOfUsers <= 0)
 				return true;
-			}
 
-			for (int i = 1; i <= amountOfKeys; i++)
+			for (int i = 0; i < amountOfUsers; i++)
 			{
-				std::string keyPath = fmt::format("../received_keys/client{}PublicKey.pem", i);
-				std::string keyContents = ReadFile::ReadPemKeyContents(keyPath);
-				EVP_PKEY *loadedPublicKey = LoadKey::LoadPublicKey(keyPath);
-
-				std::string encryptedAesKey = (Encode::base64Encode(Encrypt::encryptDataRSA(loadedPublicKey, aesKey)));
-
-				encryptedAesKey.append(signalString);
-				encryptedAesKey.append(fmt::format(":{}", i - 1));
+				EVP_PKEY *loadedPublicKey = LoadKey::loadPublicKeyInMemory(publicKeys[i]);
+				std::string encryptedAesKey = (Encode::base64Encode(Encrypt::encryptDataRSA(loadedPublicKey, aesKey))).append(signalString + fmt::format(":{}", i));
 
 				if (!sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, encryptedAesKey.data(), encryptedAesKey.size()))
 					return false;
@@ -114,92 +102,79 @@ public:
 				EVP_PKEY_free(loadedPublicKey);
 			}
 
-			std::cout << "Sent encrypted aes key to users" << std::endl;
 			return true;
 		}
 	};
 };
 
-class Receive : public Send
+namespace Receive
 {
-public:
 	template <StringLiteral file, int line>
 	static std::string receiveMessage(SSL *ssl, int bufferLength = 4096)
 	{
 		char buffer[bufferLength];
 		int bytesRead = SSL_read(ssl, buffer, bufferLength);
 
-		if (bytesRead <= 0)
-		{
-			int sslError = SSL_get_error(ssl, bytesRead);
-			std::cerr << fmt::format("[{}]:[{}] SSL_read failed: ", file.value, line);
-			printSSLError(sslError);
+		if (!SSLerrors::checkBytesError(ssl, bytesRead, std::string(file.value.data()), line, "write"))
 			return "";
-		}
 
 		buffer[bytesRead] = '\0';
 		return std::string(buffer, bytesRead);
 	}
 
-	class Client
+	struct Server
 	{
-	public:
-		static bool receiveAllPublicKeys(SSL *ssl, int *keyAmount)
+		static bool receiveAndSendEncryptedAesKey(SSL *ssl, std::map<std::string, std::string> &publicKeys, std::vector<SSL *> &clientSSLSockets)
 		{
-			std::string amountOfKeys;
-			if ((amountOfKeys = receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
+			std::string amountOfUsers;
+			if (amountOfUsers = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl); amountOfUsers.empty())
 				return false;
 
-			int amount = std::stoi(amountOfKeys);
-			*keyAmount = amount;
-
-			if (amount <= 0)
+			if (stoi(amountOfUsers) >= 1)
 			{
-				std::cout << "No client keys to receive" << std::endl;
-				return true;
-			}
+				std::cout << "Sending aes encrypted keys" << std::endl;
 
-			for (int i = 1; i < amount + 1; i++)
-			{
-				std::string publicKeyData;
-				if ((publicKeyData = receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
-					return false;
-				SaveFile(fmt::format("../received_keys/client{}PublicKey.pem", i), publicKeyData, std::ios::binary);
+				for (int i = 0; i < stoi(amountOfUsers); i++)
+				{
+					std::string encryptedAesKey;
+					if (encryptedAesKey = receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl); encryptedAesKey.empty())
+						return false;
+
+					std::cout << "Encrypted AES Key: " << encryptedAesKey << std::endl;
+
+					int extractedIndex = stoi(encryptedAesKey.substr(encryptedAesKey.find(":") + 1));
+					std::string encryptedKey = encryptedAesKey.substr(0, encryptedAesKey.find(":"));
+
+					if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(clientSSLSockets[extractedIndex], encryptedKey.data(), encryptedKey.size()))
+						return false;
+				}
+				std::cout << "Sent aes encrypted keys" << std::endl;
 			}
 
 			return true;
 		}
 	};
 
-	class Server
+	struct Client
 	{
-	public:
-		static bool receiveAndSendEncryptedAesKey(SSL *ssl)
+		static bool receiveAllRSAPublicKeys(SSL *ssl, std::vector<std::string> &publicKeys, int *keysAmount)
 		{
-			std::string amountOfUsers;
-			if ((amountOfUsers = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
+			std::string amountOfKeys;
+			if (amountOfKeys = receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl); amountOfKeys.empty())
 				return false;
 
-			if (std::stoi(amountOfUsers) > 0)
+			*keysAmount = std::stoi(amountOfKeys);
+
+			if (std::stoi(amountOfKeys) <= 0)
+				return true;
+
+			for (int i = 0; i < std::stoi(amountOfKeys); i++)
 			{
-				for (int i = 0; i < std::stoi(amountOfUsers); i++)
-				{
-					std::string encryptedAesKey;
-					if ((encryptedAesKey = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
-						return false;
-
-					std::cout << "Encrypted Aes key data: " << encryptedAesKey << std::endl;
-
-					int extractedIndex = stoi(encryptedAesKey.substr(encryptedAesKey.find(":") + 1));
-					std::string encryptedKey = encryptedAesKey.substr(0, encryptedAesKey.find(":"));
-
-					if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ServerStorage::clientSSLSockets[extractedIndex], encryptedKey.data(), encryptedKey.size()))
-						return false;
-				}
-
-				std::cout << "Sent all aes keys" << std::endl;
+				std::string publicKeyData;
+				if (publicKeyData = receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl); publicKeyData.empty())
+					return false;
+				publicKeys.push_back(publicKeyData);
 			}
-
 			return true;
 		}
 	};

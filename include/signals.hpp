@@ -116,7 +116,7 @@ private:
 		message = message.substr(0, message.size() - signalStringSizes[static_cast<size_t>(Signals::SignalType::SERVERMESSAGE)]);
 		message = Decode::base64Decode(message);
 
-		EVP_PKEY *privateKey = LoadKey::LoadPrivateKey(FilePaths::clientPrivateKeyPath, false);
+		EVP_PKEY *privateKey = LoadKey::loadPrivateKey(FilePaths::clientPrivateKeyPath, false);
 		message = Decrypt::decryptDataRSA(privateKey, message);
 		EVP_PKEY_free(privateKey);
 
@@ -140,7 +140,7 @@ private:
 		message = message.substr(0, message.size() - Signals::SignalManager::getSignalAsString(Signals::SignalType::NEWAESKEY).size());
 		message = Decode::base64Decode(message);
 
-		EVP_PKEY *privateKey = LoadKey::LoadPrivateKey(FilePaths::clientPrivateKeyPath, false);
+		EVP_PKEY *privateKey = LoadKey::loadPrivateKey(FilePaths::clientPrivateKeyPath, false);
 		message = Decrypt::decryptDataRSA(privateKey, message);
 		EVP_PKEY_free(privateKey);
 

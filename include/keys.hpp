@@ -167,7 +167,7 @@ public:
 class LoadKey
 {
 public:
-	static EVP_PKEY *LoadPrivateKey(const std::string &privateKeyFile, const bool echo = true)
+	static EVP_PKEY *loadPrivateKey(const std::string &privateKeyFile, const bool echo = true)
 	{
 		BIO *bio = BIO_new_file(privateKeyFile.c_str(), "r");
 		if (!bio)
@@ -193,7 +193,7 @@ public:
 		return pkey;
 	}
 
-	static EVP_PKEY *LoadPublicKey(const std::string &publicKeyFile, const bool echo = true)
+	static EVP_PKEY *loadPublicKey(const std::string &publicKeyFile, const bool echo = true)
 	{
 		BIO *bio = BIO_new_file(publicKeyFile.c_str(), "r");
 		if (!bio)
@@ -216,5 +216,25 @@ public:
 			std::cout << fmt::format("Loaded RSA Public key file ({}) successfully", publicKeyFile) << std::endl;
 
 		return pkey;
+	}
+
+	static EVP_PKEY *loadPublicKeyInMemory(const std::string &keyData)
+	{
+		BIO *bio = BIO_new_mem_buf(keyData.data(), static_cast<int>(keyData.size()));
+		if (!bio)
+		{
+			std::cerr << "Failed to create BIO for key data" << std::endl;
+			return nullptr;
+		}
+
+		EVP_PKEY *publicKey = PEM_read_bio_PUBKEY(bio, nullptr, nullptr, nullptr);
+		if (!publicKey)
+		{
+			std::cerr << "Failed to load public key from BIO" << std::endl;
+			ERR_print_errors_fp(stderr);
+		}
+
+		BIO_free(bio);
+		return publicKey;
 	}
 };

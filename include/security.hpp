@@ -45,7 +45,7 @@ private:
 
 		std::cout << "Hashed password received: " << receivedPassword << std::endl;
 
-		EVP_PKEY *serverPrivateKey = LoadKey::LoadPrivateKey(FilePaths::serverPrivateKeyPath);
+		EVP_PKEY *serverPrivateKey = LoadKey::loadPrivateKey(FilePaths::serverPrivateKeyPath);
 
 		if (!serverPrivateKey)
 			return false;

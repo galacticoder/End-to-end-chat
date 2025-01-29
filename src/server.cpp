@@ -49,13 +49,13 @@ void handleClient(SSL *ssl, int &clientSocket)
 	ServerStorage::clientPublicKeys[clientUsername] = clientPublicKey;
 	std::cout << "Public key: " << clientPublicKey << std::endl;
 
-	if (!Send::Server::sendAllPublicKeys(ssl, clientUsername))
+	if (!Send::Server::sendAllPublicKeys(ssl, clientUsername, ServerStorage::clientPublicKeys))
 	{
 		CleanUp::Server::cleanUpClient(ssl, clientSocket, clientUsername);
 		return;
 	}
 
-	if (!Receive::Server::receiveAndSendEncryptedAesKey(ssl))
+	if (!Receive::Server::receiveAndSendEncryptedAesKey(ssl, ServerStorage::clientPublicKeys, ServerStorage::clientSSLSockets))
 	{
 		CleanUp::Server::cleanUpClient(ssl, clientSocket, clientUsername);
 		return;
@@ -66,25 +66,8 @@ void handleClient(SSL *ssl, int &clientSocket)
 		std::string message;
 		if ((message = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
 		{
+			// Send::BroadcastExitMessage(ssl, clientUsername);
 			CleanUp::Server::cleanUpClient(ssl, clientSocket, clientUsername);
-			std::string exitMessage = fmt::format("{} has left the chat", clientUsername);
-			for (auto const &[key, val] : ServerStorage::clientPublicKeys)
-			{
-				std::string filePath = "temp.pem";
-				SaveFile temp(filePath, val, std::ios::binary);
-				EVP_PKEY *loadKey = LoadKey::LoadPublicKey(filePath);
-				std::string encryptedExitMessage = Encrypt::encryptDataRSA(loadKey, exitMessage);
-				EVP_PKEY_free(loadKey);
-				encryptedExitMessage = Encode::base64Encode(encryptedExitMessage);
-				encryptedExitMessage.append(Signals::SignalManager::getSignalAsString(Signals::SignalType::SERVERMESSAGE));
-				std::cout << "msg exit: " << encryptedExitMessage << std::endl;
-				std::cout << "size: " << ServerStorage::clientSSLSockets.size() << std::endl;
-				for (SSL *socket : ServerStorage::clientSSLSockets)
-				{
-					if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(socket, encryptedExitMessage.data(), encryptedExitMessage.size()))
-						return;
-				}
-			}
 			return;
 		}
 
@@ -92,7 +75,7 @@ void handleClient(SSL *ssl, int &clientSocket)
 		message.append(Signals::SignalManager::getSignalAsString(Signals::SignalType::CLIENTMESSAGE));
 		std::cout << "Client message: " << message << std::endl;
 
-		if (!Send::Server::broadcastMessage(ssl, message))
+		if (!Send::Server::broadcastMessageToClients(ssl, message, ServerStorage::clientSSLSockets))
 		{
 			CleanUp::Server::cleanUpClient(ssl, clientSocket, clientUsername);
 			return;
