@@ -4,10 +4,9 @@
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 
-class SSLSetup
+namespace SSLSetup
 {
-public:
-	static void initOpenssl()
+	void initOpenssl()
 	{
 		SSL_library_init();
 		OpenSSL_add_all_algorithms();
@@ -15,7 +14,7 @@ public:
 		ERR_load_crypto_strings();
 	}
 
-	static SSL_CTX *createCTX(const SSL_METHOD *methodType)
+	SSL_CTX *createCTX(const SSL_METHOD *methodType)
 	{
 		const SSL_METHOD *method = methodType;
 		SSL_CTX *ctx = SSL_CTX_new(method);
@@ -28,7 +27,7 @@ public:
 		return ctx;
 	}
 
-	static void configureCTX(SSL_CTX *ctx, const std::string &certPath, const std::string &privateKeyPath)
+	void configureCTX(SSL_CTX *ctx, const std::string &certPath, const std::string &privateKeyPath)
 	{
 		if (SSL_CTX_use_certificate_file(ctx, certPath.c_str(), SSL_FILETYPE_PEM) <= 0)
 		{
