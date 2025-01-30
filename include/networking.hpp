@@ -115,10 +115,21 @@ public:
 		return sockfd;
 	}
 
-	static int acceptClientConnection(int &serverSocket)
+	static int acceptClientConnectionTCP(int &serverSocket)
 	{
 		sockaddr_in clientAddress;
 		socklen_t clientLen = sizeof(clientAddress);
 		return accept(serverSocket, (struct sockaddr *)&clientAddress, &clientLen);
+	}
+
+	static bool acceptClientConnectionSSL(SSL *ssl)
+	{
+		if (SSL_accept(ssl) <= 0)
+		{
+			std::cout << "Error accepting client: ";
+			ERR_print_errors_fp(stderr);
+			return false;
+		}
+		return true;
 	}
 };

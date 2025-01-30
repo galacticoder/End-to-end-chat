@@ -123,7 +123,7 @@ public:
 		if (!Send::Server::sendAllPublicKeys(ssl, clientUsername, ClientManagement::clientPublicKeys))
 			return false;
 
-		if (!Receive::Server::receiveAndSendEncryptedAesKey(ssl, ClientManagement::clientSSLSockets))
+		if (!Receive::Server::receiveAndSendEncryptedAesKey(ssl, ClientManagement::clientSSLSockets, ClientManagement::clientPublicKeys))
 			return false;
 
 		return true;

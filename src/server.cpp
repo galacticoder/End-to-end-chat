@@ -86,25 +86,13 @@ int main()
 
 	while (1)
 	{
-		int clientSocket = Networking::acceptClientConnection(serverSocket);
+		int clientSocket = Networking::acceptClientConnectionTCP(serverSocket);
 
 		SSL *ssl = SSL_new(ctx);
 		SSL_set_fd(ssl, clientSocket);
 
-		if (SSL_accept(ssl) <= 0)
-		{
-			std::cout << "Error accepting client: ";
-			ERR_print_errors_fp(stderr);
-			CleanUp::Server::cleanUpClient(ssl, clientSocket);
+		if (!Networking::acceptClientConnectionSSL(ssl))
 			continue;
-		}
-
-		const std::string serverPublicKey = FileIO::readFileContents(FilePaths::serverPublicKeyPath);
-		if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, serverPublicKey.data(), serverPublicKey.size()))
-		{
-			CleanUp::Server::cleanUpClient(ssl, clientSocket);
-			continue;
-		}
 
 		if (!Validate::handleClientPreChecks(ssl))
 		{

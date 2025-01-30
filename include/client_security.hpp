@@ -4,6 +4,7 @@
 #include <csignal>
 #include <openssl/ssl.h>
 #include "encryption.hpp"
+#include "file_handling.hpp"
 #include "keys.hpp"
 #include "send_receive.hpp"
 #include "bcrypt.h"
@@ -11,30 +12,57 @@
 
 class ClientValidation
 {
-public:
-	static void sendServerPassword(SSL *ssl)
+private:
+	static bool validateUsernameAndSetKeyPaths(SSL *ssl)
 	{
-		EVP_PKEY *serverPublicKey = LoadKey::loadPublicKey(FilePaths::clientServerPublicKeyPath);
+		std::cout << "Enter username: ";
+		std::string username;
+		std::getline(std::cin, username);
 
-		if (!serverPublicKey)
-			raise(SIGINT);
+		if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, username.data(), username.size()))
+			return false;
 
-		std::string password;
-		std::getline(std::cin, password);
+		std::string validateUsername;
+		if (validateUsername = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl); validateUsername.empty())
+			return false;
 
-		password = Encode::base64Encode(Encrypt::encryptDataRSA(serverPublicKey, bcrypt::generateHash(password)));
+		Signals::SignalType getSignal = Signals::SignalManager::getSignalTypeFromMessage(validateUsername);
+		HandleSignal(getSignal, validateUsername);
 
-		EVP_PKEY_free(serverPublicKey);
+		FilePaths::setKeyPaths(username);
 
-		if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, password.data(), password.size()))
-			raise(SIGINT);
+		return true;
+	}
 
-		std::cout << "Verifying password.." << std::endl;
+	static bool makeAndSendKeys(SSL *ssl, CryptoPP::byte *key, size_t keySize, CryptoPP::byte *iv, size_t ivSize, std::vector<std::string> &publicKeys)
+	{
+		GenerateKeys::generateRSAKeys(FilePaths::clientPrivateKeyPath, FilePaths::clientPublicKeyPath);
 
-		std::string isPasswordVerified;
-		if ((isPasswordVerified = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
-			raise(SIGINT);
+		const std::string publicKeyData = FileIO::readFileContents(FilePaths::clientPublicKeyPath);
+		if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, publicKeyData.data(), publicKeyData.size()))
+			return false;
 
-		HandleSignal(Signals::SignalManager::getSignalTypeFromMessage(isPasswordVerified), isPasswordVerified);
+		CryptoPP::GCM<CryptoPP::AES>::Encryption setKey;
+		GenerateKeys::generateKeyAESGCM(key, iv);
+		setKey.SetKeyWithIV(key, keySize, iv, ivSize);
+
+		std::string serializedKeyAndIv = Encode::serializeKeyAndIV(key, keySize, iv, ivSize);
+
+		if (!Receive::Client::receiveAllRSAPublicKeys(ssl, publicKeys))
+			return false;
+
+		if (!Send::Client::sendEncryptedAESKey(ssl, serializedKeyAndIv, Signals::SignalManager::getSignalAsString(Signals::SignalType::NEWAESKEY), publicKeys))
+			return false;
+
+		return true;
+	}
+
+public:
+	static bool clientAuthenticationAndKeyExchange(SSL *ssl, CryptoPP::byte *key, size_t keySize, CryptoPP::byte *iv, size_t ivSize, std::vector<std::string> &publicKeys)
+	{
+		if (!validateUsernameAndSetKeyPaths(ssl) || !makeAndSendKeys(ssl, key, keySize, iv, ivSize, publicKeys))
+			return false;
+
+		return true;
 	}
 };

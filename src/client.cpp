@@ -8,6 +8,7 @@
 #include <thread>
 #include <vector>
 #include "../include/ssl.hpp"
+#include "../include/client_security.hpp"
 #include "../include/send_receive.hpp"
 #include "../include/signals.hpp"
 #include "../include/keys.hpp"
@@ -37,79 +38,40 @@ void receiveMessages(SSL *ssl)
 
 		Signals::SignalType detectSignal = Signals::SignalManager::getSignalTypeFromMessage(message);
 		HandleSignal(detectSignal, message, key, sizeof(key), iv, sizeof(iv));
-
-		if (detectSignal == Signals::SignalType::UNKNOWN)
-		{
-			Decode::deserializeIV(message, iv, sizeof(iv));
-			std::string decryptedMessage = Decrypt::decryptDataAESGCM(message, key, sizeof(key), iv, sizeof(iv));
-			std::cout << "Received message: " << decryptedMessage << std::endl;
-		}
 	}
 }
 
 void communicateWithServer(SSL *ssl)
 {
-	std::cout << "Enter username: ";
-	std::string username;
-	std::getline(std::cin, username);
-
-	if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, username.data(), username.size()))
+	if (!ClientValidation::clientAuthenticationAndKeyExchange(ssl, key, sizeof(key), iv, sizeof(iv), publicKeys))
 		return;
-
-	std::string validateUsername;
-	if (validateUsername = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl); validateUsername.empty())
-	{
-		CleanUp::Client::cleanUpClient();
-		return;
-	}
-
-	Signals::SignalType getSignal = Signals::SignalManager::getSignalTypeFromMessage(validateUsername);
-	HandleSignal(getSignal, validateUsername, key, sizeof(key), iv, sizeof(iv));
-
-	FilePaths::setKeyPaths(username);
-	GenerateKeys::generateRSAKeys(FilePaths::clientPrivateKeyPath, FilePaths::clientPublicKeyPath);
-
-	const std::string publicKeyData = FileIO::readFileContents(FilePaths::clientPublicKeyPath);
-	if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, publicKeyData.data(), publicKeyData.size()))
-		return;
-
-	CryptoPP::GCM<CryptoPP::AES>::Encryption setKey;
-	GenerateKeys::generateKeyAESGCM(key, iv);
-	setKey.SetKeyWithIV(key, sizeof(key), iv, sizeof(iv));
-
-	std::string serializedKeyAndIv = Encode::serializeKeyAndIV(key, sizeof(key), iv, sizeof(iv));
-
-	int amountOfKeys;
-
-	if (!Receive::Client::receiveAllRSAPublicKeys(ssl, publicKeys, &amountOfKeys))
-	{
-		CleanUp::Client::cleanUpClient();
-		return;
-	}
-
-	if (!Send::Client::sendEncryptedAESKey(ssl, serializedKeyAndIv, Signals::SignalManager::getSignalAsString(Signals::SignalType::NEWAESKEY), publicKeys, amountOfKeys))
-	{
-		CleanUp::Client::cleanUpClient();
-		return;
-	}
 
 	std::thread(receiveMessages, ssl).detach();
 	std::cout << "You can now chat" << std::endl;
+
+	auto trimws = [&](std::string &str)
+	{
+		str.erase(0, str.find_first_not_of(" \t\n\r"));
+		str.erase(str.find_last_not_of(" \t\n\r") + 1);
+		return str;
+	};
 
 	while (1)
 	{
 		std::string message;
 		std::getline(std::cin, message);
+		message = trimws(message);
 
-		std::cout << "\033[A";
-		std::cout << fmt::format("{}: {}", username, message) << std::endl;
-
-		if (message.empty())
-			continue;
-
-		std::string ciphertext = Encrypt::encryptDataAESGCM(message, key, sizeof(key));
-		if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, ciphertext.data(), ciphertext.size()))
-			return;
+		if (!message.empty())
+		{
+			std::cout << "\033[A";
+			std::cout << fmt::format("{}: {}", username, message) << std::endl;
+			std::string ciphertext = Encrypt::encryptDataAESGCM(message, key, sizeof(key));
+			if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, ciphertext.data(), ciphertext.size()))
+				break;
+		}
+		else
+			std::cout << "\033[A";
 	}
 }
 
@@ -155,24 +117,15 @@ int main()
 	if (SSL_connect(ssl) <= 0)
 	{
 		ERR_print_errors_fp(stderr);
+		raise(SIGINT);
 	}
-	else
-	{
-		std::string serverPublicKey;
-		if ((serverPublicKey = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
-			CleanUp::Client::cleanUpClient();
 
-		FileIO::saveToFile(FilePaths::clientServerPublicKeyPath, serverPublicKey, std::ios::binary);
+	std::string validateConnectionString;
+	if ((validateConnectionString = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
+		CleanUp::Client::cleanUpClient();
+	HandleSignal(Signals::SignalManager::getSignalTypeFromMessage(validateConnectionString), validateConnectionString);
 
-		std::string getSignalString;
-		if ((getSignalString = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
-			CleanUp::Client::cleanUpClient();
-
-		Signals::SignalType getSignal = Signals::SignalManager::getSignalTypeFromMessage(getSignalString);
-		HandleSignal(getSignal, getSignalString);
-
-		communicateWithServer(ssl);
-	}
+	communicateWithServer(ssl);
 
 	CleanUp::Client::cleanUpClient();
 	return 0;

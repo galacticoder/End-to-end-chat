@@ -16,6 +16,12 @@ struct StringLiteral
 	std::array<char, N> value;
 };
 
+namespace Receive
+{
+	template <StringLiteral file, int line>
+	static std::string receiveMessage(SSL *ssl);
+}
+
 namespace SSLerrors
 {
 	static void printSSLError(int sslError)
@@ -36,7 +42,6 @@ namespace SSLerrors
 		}
 		return true;
 	}
-
 }
 
 namespace Send
@@ -65,6 +70,8 @@ namespace Send
 		static void broadcastClientExitMessage(SSL *ssl, const std::string &clientUsername, std::map<std::string, std::string> &clientPublicKeys, std::vector<SSL *> &clientSSLSockets, const std::string &signalString)
 		{
 			std::string exitMessage = fmt::format("{} has left the chat", clientUsername);
+			std::cout << fmt::format("Broadcasting client exit message: {}", exitMessage) << std::endl;
+
 			for (auto const &[key, val] : clientPublicKeys)
 			{
 				if (key != clientUsername)
@@ -72,9 +79,6 @@ namespace Send
 					EVP_PKEY *loadKey = LoadKey::loadPublicKeyInMemory(val);
 
 					std::string encryptedExitMessage = Encode::base64Encode(Encrypt::encryptDataRSA(loadKey, exitMessage)).append(signalString);
-
-					std::cout << fmt::format("Exit message normal {}: {}", key, exitMessage) << std::endl;
-					std::cout << fmt::format("Exit message encrypted {}: {}", key, encryptedExitMessage) << std::endl;
 
 					EVP_PKEY_free(loadKey);
 
@@ -89,7 +93,6 @@ namespace Send
 		static bool sendAllPublicKeys(SSL *ssl, const std::string &currentClientUsername, std::map<std::string, std::string> &clientPublicKeys)
 		{
 			std::string amountOfUsers = std::to_string(clientPublicKeys.size() - 1); // -1 for the current user
-
 			if (!sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, amountOfUsers.c_str(), amountOfUsers.size()))
 				return false;
 
@@ -107,15 +110,16 @@ namespace Send
 
 	struct Client
 	{
-		static bool sendEncryptedAESKey(SSL *ssl, std::string &aesKey, const std::string &signalString, std::vector<std::string> &publicKeys, int &amountOfUsers)
+		static bool sendEncryptedAESKey(SSL *ssl, std::string &aesKey, const std::string &signalString, std::vector<std::string> &publicKeys)
 		{
-			if (!sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, std::to_string(amountOfUsers).data(), std::to_string(amountOfUsers).size()))
+			std::string amountOfUsers;
+			if (amountOfUsers = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl); amountOfUsers.empty())
 				return false;
 
-			if (amountOfUsers <= 0)
+			if (stoi(amountOfUsers) <= 0)
 				return true;
 
-			for (int i = 0; i < amountOfUsers; i++)
+			for (int i = 0; i < stoi(amountOfUsers); i++)
 			{
 				EVP_PKEY *loadedPublicKey = LoadKey::loadPublicKeyInMemory(publicKeys[i]);
 				std::string encryptedAesKey = (Encode::base64Encode(Encrypt::encryptDataRSA(loadedPublicKey, aesKey))).append(signalString + fmt::format(":{}", i));
@@ -134,10 +138,10 @@ namespace Send
 namespace Receive
 {
 	template <StringLiteral file, int line>
-	static std::string receiveMessage(SSL *ssl, int bufferLength = 4096)
+	static std::string receiveMessage(SSL *ssl)
 	{
-		char buffer[bufferLength];
-		int bytesRead = SSL_read(ssl, buffer, bufferLength);
+		char buffer[4096];
+		int bytesRead = SSL_read(ssl, buffer, 4096);
 
 		if (!SSLerrors::checkBytesError(ssl, bytesRead, std::string(file.value.data()), line, "write"))
 			return "";
@@ -148,10 +152,10 @@ namespace Receive
 
 	struct Server
 	{
-		static bool receiveAndSendEncryptedAesKey(SSL *ssl, std::vector<SSL *> &clientSSLSockets)
+		static bool receiveAndSendEncryptedAesKey(SSL *ssl, std::vector<SSL *> &clientSSLSockets, std::map<std::string, std::string> &clientPublicKeys)
 		{
-			std::string amountOfUsers;
-			if (amountOfUsers = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl); amountOfUsers.empty())
+			std::string amountOfUsers = std::to_string(clientPublicKeys.size() - 1); // -1 for the current user
+			if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, amountOfUsers.c_str(), amountOfUsers.size()))
 				return false;
 
 			if (stoi(amountOfUsers) >= 1)
@@ -181,18 +185,16 @@ namespace Receive
 
 	struct Client
 	{
-		static bool receiveAllRSAPublicKeys(SSL *ssl, std::vector<std::string> &publicKeys, int *keysAmount)
+		static bool receiveAllRSAPublicKeys(SSL *ssl, std::vector<std::string> &publicKeys)
 		{
-			std::string amountOfKeys;
-			if (amountOfKeys = receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl); amountOfKeys.empty())
+			std::string amountOfUsers;
+			if (amountOfUsers = receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl); amountOfUsers.empty())
 				return false;
 
-			*keysAmount = std::stoi(amountOfKeys);
-
-			if (std::stoi(amountOfKeys) <= 0)
+			if (std::stoi(amountOfUsers) <= 0)
 				return true;
 
-			for (int i = 0; i < std::stoi(amountOfKeys); i++)
+			for (int i = 0; i < std::stoi(amountOfUsers); i++)
 			{
 				std::string publicKeyData;
 				if (publicKeyData = receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl); publicKeyData.empty())
