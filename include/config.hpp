@@ -4,9 +4,8 @@
 #include <vector>
 #include <openssl/ssl.h>
 
-class ClientManagement
+namespace ClientManagement
 {
-public:
 	static inline std::vector<SSL *> clientSSLSockets;
 	static inline std::map<std::string, std::string> clientPublicKeys;
 };

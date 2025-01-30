@@ -69,7 +69,7 @@ void communicateWithServer(SSL *ssl)
 	FilePaths::setKeyPaths(username);
 	GenerateKeys::generateRSAKeys(FilePaths::clientPrivateKeyPath, FilePaths::clientPublicKeyPath);
 
-	const std::string publicKeyData = ReadFile::ReadPemKeyContents(FilePaths::clientPublicKeyPath);
+	const std::string publicKeyData = FileIO::readFileContents(FilePaths::clientPublicKeyPath);
 	if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, publicKeyData.data(), publicKeyData.size()))
 		return;
 
@@ -117,8 +117,8 @@ int main()
 {
 	SSLSetup::initOpenssl();
 
-	CreateDirectory makeKeysDir(FilePaths::keysDirectory);
-	CreateDirectory makeReceivedKeysDir(FilePaths::receivedKeysDirectory);
+	FileSystem::createDirectory(FilePaths::keysDirectory);
+	FileSystem::createDirectory(FilePaths::receivedKeysDirectory);
 
 	GenerateKeys::generateCertAndPrivateKey(FilePaths::clientPrivateKeyCertPath, FilePaths::clientCertPath);
 
@@ -148,7 +148,7 @@ int main()
 			SSL_CTX_free(ctx);
 
 		// DeletePath deleteKeysDirectory(FilePaths::keysDirectory);
-		DeletePath deleteReceivedKeysDirectory(FilePaths::receivedKeysDirectory);
+		FileSystem::deletePath(FilePaths::receivedKeysDirectory);
 		_exit(signal); // seg fault here
 	};
 
@@ -162,7 +162,7 @@ int main()
 		if ((serverPublicKey = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
 			CleanUp::Client::cleanUpClient();
 
-		SaveFile savePubKey(FilePaths::clientServerPublicKeyPath, serverPublicKey, std::ios::binary);
+		FileIO::saveToFile(FilePaths::clientServerPublicKeyPath, serverPublicKey, std::ios::binary);
 
 		std::string getSignalString;
 		if ((getSignalString = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())

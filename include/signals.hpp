@@ -114,10 +114,9 @@ private:
 	static bool containsOnlyASCII(const std::string &message)
 	{
 		for (auto c : message)
-		{
 			if (static_cast<unsigned char>(c) > 127)
 				return false;
-		}
+
 		return true;
 	}
 

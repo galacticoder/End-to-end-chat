@@ -63,7 +63,7 @@ int main()
 
 	SSLSetup::initOpenssl();
 
-	CreateDirectory makeKeysDir(FilePaths::keysDirectory);
+	FileSystem::createDirectory(FilePaths::keysDirectory);
 	GenerateKeys::generateCertAndPrivateKey(FilePaths::serverPrivateKeyPath, FilePaths::serverCertPath);
 
 	SSL_CTX *ctx = SSLSetup::createCTX(TLS_server_method());
@@ -76,7 +76,7 @@ int main()
 		std::cout << fmt::format("\nSignal {} caught. Killing server", strsignal(signal)) << std::endl;
 		close(serverSocket);
 		SSL_CTX_free(ctx);
-		DeletePath deleteDirectory(FilePaths::keysDirectory);
+		FileSystem::deletePath(FilePaths::keysDirectory);
 		exit(signal);
 	};
 
@@ -99,7 +99,7 @@ int main()
 			continue;
 		}
 
-		const std::string serverPublicKey = ReadFile::ReadPemKeyContents(FilePaths::serverPublicKeyPath);
+		const std::string serverPublicKey = FileIO::readFileContents(FilePaths::serverPublicKeyPath);
 		if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, serverPublicKey.data(), serverPublicKey.size()))
 		{
 			CleanUp::Server::cleanUpClient(ssl, clientSocket);
@@ -117,7 +117,7 @@ int main()
 
 	close(serverSocket);
 	SSL_CTX_free(ctx);
-	DeletePath deleteDirectory(FilePaths::keysDirectory);
+	FileSystem::deletePath(FilePaths::keysDirectory);
 
 	std::cout << "Cleaned up server" << std::endl;
 	return 0;
