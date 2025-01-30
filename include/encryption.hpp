@@ -11,17 +11,16 @@
 #include <openssl/err.h>
 #include <openssl/pem.h>
 
-class Encode
+namespace Encode
 {
-public:
-	static std::string base64Encode(const std::string &input)
+	std::string base64Encode(const std::string &input)
 	{
 		std::string encoded;
 		CryptoPP::StringSource(input, true, new CryptoPP::Base64Encoder(new CryptoPP::StringSink(encoded), false));
 		return encoded;
 	}
 
-	static std::string serializeKeyAndIV(const CryptoPP::byte *key, size_t keySize, const CryptoPP::byte *iv, size_t ivSize)
+	std::string serializeKeyAndIV(const CryptoPP::byte *key, size_t keySize, const CryptoPP::byte *iv, size_t ivSize)
 	{
 		std::string serializedKey, serializedIV;
 
@@ -36,7 +35,7 @@ public:
 		return serializedKey + ":" + serializedIV;
 	}
 
-	static std::string serializeIV(const CryptoPP::byte *iv, size_t ivSize)
+	std::string serializeIV(const CryptoPP::byte *iv, size_t ivSize)
 	{
 		std::string serializedIV;
 
@@ -48,17 +47,16 @@ public:
 	}
 };
 
-class Decode
+namespace Decode
 {
-public:
-	static std::string base64Decode(const std::string &input)
+	std::string base64Decode(const std::string &input)
 	{
 		std::string decoded;
 		CryptoPP::StringSource(input, true, new CryptoPP::Base64Decoder(new CryptoPP::StringSink(decoded)));
 		return decoded;
 	}
 
-	static void deserializeKeyAndIV(const std::string &serializedData, CryptoPP::byte *key, size_t keySize, CryptoPP::byte *iv, size_t ivSize)
+	void deserializeKeyAndIV(const std::string &serializedData, CryptoPP::byte *key, size_t keySize, CryptoPP::byte *iv, size_t ivSize)
 	{
 		auto separatorPos = serializedData.find(':');
 		std::string serializedKey = serializedData.substr(0, separatorPos);
@@ -75,7 +73,7 @@ public:
 		decoderIV.Get(iv, ivSize);
 	}
 
-	static void deserializeIV(const std::string &serializedData, CryptoPP::byte *iv, size_t ivSize)
+	void deserializeIV(const std::string &serializedData, CryptoPP::byte *iv, size_t ivSize)
 	{
 		std::string serializedIvString = serializedData.substr(0, serializedData.find(":"));
 
@@ -86,10 +84,9 @@ public:
 	}
 };
 
-class Encrypt
+namespace Encrypt
 {
-public:
-	static std::string encryptDataAESGCM(const std::string &data, const CryptoPP::byte *key, size_t keySize)
+	std::string encryptDataAESGCM(const std::string &data, const CryptoPP::byte *key, size_t keySize)
 	{
 		std::string ciphertext;
 
@@ -113,7 +110,7 @@ public:
 		return ciphertext;
 	}
 
-	static std::string encryptDataRSA(EVP_PKEY *publicKey, const std::string &data)
+	std::string encryptDataRSA(EVP_PKEY *publicKey, const std::string &data)
 	{
 		EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new(publicKey, nullptr);
 		if (!ctx)
@@ -151,10 +148,9 @@ public:
 	}
 };
 
-class Decrypt
+namespace Decrypt
 {
-public:
-	static std::string decryptDataAESGCM(const std::string &ciphertext, const CryptoPP::byte *key, size_t keySize, const CryptoPP::byte *iv, size_t ivSize)
+	std::string decryptDataAESGCM(const std::string &ciphertext, const CryptoPP::byte *key, size_t keySize, const CryptoPP::byte *iv, size_t ivSize)
 	{
 		std::string extractedCiphertext = ciphertext.substr(ciphertext.find(":") + 1);
 		extractedCiphertext = Decode::base64Decode(extractedCiphertext);
@@ -170,7 +166,7 @@ public:
 		return recovered;
 	}
 
-	static std::string decryptDataRSA(EVP_PKEY *privateKey, const std::string &encryptedData)
+	std::string decryptDataRSA(EVP_PKEY *privateKey, const std::string &encryptedData)
 	{
 		EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new(privateKey, nullptr);
 		if (!ctx)
