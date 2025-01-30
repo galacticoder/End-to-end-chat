@@ -8,8 +8,13 @@
 #include <thread>
 #include <atomic>
 #include <vector>
+#include <future>
+#include <condition_variable>
+#include <mutex>
+#include <sys/select.h>
 #include "../include/ssl.hpp"
 #include "../include/client_security.hpp"
+#include "../include/client_input.hpp"
 #include "../include/send_receive.hpp"
 #include "../include/signals.hpp"
 #include "../include/keys.hpp"
@@ -18,25 +23,58 @@
 #include "../include/encryption.hpp"
 #include "../include/cleanup.hpp"
 
+constexpr const char *SERVER_IP_ADDRESS = "127.0.0.1";
+constexpr int PORT = 8080;
+
 std::vector<std::string> publicKeys;
 std::string username;
 
-std::atomic<bool> running{true};
+std::atomic<bool> threadRunning{true};
+std::atomic<bool> shutdownRequested{false};
+std::mutex ssl_mutex;
+std::condition_variable ssl_cv;
+
 void receiveMessages(SSL *ssl, CryptoPP::byte *key, size_t keySize, CryptoPP::byte *iv, size_t ivSize)
 {
-	while (running)
+	while (threadRunning)
 	{
-		std::string message;
-		if (message = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl); message.empty())
-		{
-			running = false;
-			std::cout << "Server killed" << std::endl;
-			raise(SIGINT);
-		}
+		fd_set readfds;
+		FD_ZERO(&readfds);
+		FD_SET(SSL_get_fd(ssl), &readfds);
 
-		Signals::SignalType detectSignal = Signals::SignalManager::getSignalTypeFromMessage(message);
-		HandleSignal(detectSignal, message, key, keySize, iv, ivSize);
+		struct timeval timeout;
+		timeout.tv_sec = 0;
+		timeout.tv_usec = 100000;
+
+		if (select(SSL_get_fd(ssl) + 1, &readfds, nullptr, nullptr, &timeout) > 0)
+		{
+			std::string message;
+			{
+				std::unique_lock<std::mutex> lock(ssl_mutex);
+				if (message = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl); message.empty())
+				{
+					threadRunning = false;
+					std::cout << "Server killed" << std::endl;
+					break;
+				}
+			}
+
+			if (!threadRunning)
+				break;
+
+			Signals::SignalType detectSignal = Signals::SignalManager::getSignalTypeFromMessage(message);
+			HandleSignal(detectSignal, message, key, keySize, iv, ivSize);
+		}
+		else
+		{
+			std::unique_lock<std::mutex> lock(ssl_mutex);
+			if (!threadRunning)
+				break;
+		}
 	}
+
+	std::cout << fmt::format("{} thread exited", __FUNCTION__) << std::endl;
+	ssl_cv.notify_one();
 }
 
 void communicateWithServer(SSL *ssl)
@@ -47,36 +85,40 @@ void communicateWithServer(SSL *ssl)
 	if (!ClientValidation::clientAuthenticationAndKeyExchange(ssl, key, sizeof(key), iv, sizeof(iv), publicKeys))
 		return;
 
-	std::thread(receiveMessages, ssl, key, sizeof(key), iv, sizeof(iv)).detach();
+	std::thread receiveMessageThread(receiveMessages, ssl, key, sizeof(key), iv, sizeof(iv));
 
-	auto trimws = [&](std::string &str)
+	auto trimws = [&](std::string *str)
 	{
-		str.erase(0, str.find_first_not_of(" \t\n\r"));
-		str.erase(str.find_last_not_of(" \t\n\r") + 1);
-		return str;
+		(*str).erase(0, (*str).find_first_not_of(" \t\n\r"));
+		(*str).erase((*str).find_last_not_of(" \t\n\r") + 1);
 	};
 
 	std::cout << "You can now chat" << std::endl;
 
-	while (1)
+	ClientInput::startMessageInput();
+	while (threadRunning)
 	{
-		std::string message;
-		std::getline(std::cin, message);
-		message = trimws(message);
+		std::string message = ClientInput::receiveMessage();
+		trimws(&message);
 
-		if (message.empty())
+		if (!message.empty())
 		{
-			std::cout << "\033[A";
-			continue;
+			std::cout << fmt::format("\033[A{}: {}", username, message) << std::endl;
+
+			std::string ciphertext = Encrypt::encryptDataAESGCM(message, key, sizeof(key));
+			if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, ciphertext.data(), ciphertext.size()))
+				break;
 		}
-
-		std::cout << "\033[A";
-		std::cout << fmt::format("{}: {}", username, message) << std::endl;
-
-		std::string ciphertext = Encrypt::encryptDataAESGCM(message, key, sizeof(key));
-		if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, ciphertext.data(), ciphertext.size()))
-			break;
+		else
+		{
+			if (!threadRunning)
+				break;
+		}
 	}
+
+	ssl_cv.notify_one();
+	receiveMessageThread.join();
+	std::cout << fmt::format("{} function exited", __FUNCTION__) << std::endl;
 }
 
 int main()
@@ -91,10 +133,7 @@ int main()
 	SSL_CTX *ctx = SSLSetup::createCTX(TLS_client_method());
 	SSLSetup::configureCTX(ctx, FilePaths::clientCertPath, FilePaths::clientPrivateKeyCertPath);
 
-	const std::string serverIpAddress = "127.0.0.1";
-	const int port = 8080;
-
-	int socketfd = Networking::startClientSocket(port, serverIpAddress);
+	int socketfd = Networking::startClientSocket(PORT, SERVER_IP_ADDRESS);
 	std::signal(SIGINT, signalHandle);
 
 	SSL *ssl = SSL_new(ctx);
@@ -102,10 +141,12 @@ int main()
 
 	shutdownHandler = [&](int signal)
 	{
-		running = false;
-		std::this_thread::sleep_for(std::chrono::milliseconds(100));
-		CleanUp::Client::cleanUpClient(ssl, ctx, socketfd);
-		_exit(signal);
+		shutdownRequested = true;
+		{
+			std::unique_lock<std::mutex> lock(ssl_mutex);
+			threadRunning = false;
+		}
+		ssl_cv.notify_one();
 	};
 
 	if (SSL_connect(ssl) <= 0)
@@ -115,13 +156,18 @@ int main()
 	}
 
 	std::string validateConnectionString;
-	if ((validateConnectionString = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
+	if (validateConnectionString = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl); validateConnectionString.empty())
 		raise(SIGINT);
 
 	HandleSignal(Signals::SignalManager::getSignalTypeFromMessage(validateConnectionString), validateConnectionString);
 
 	communicateWithServer(ssl);
 
-	raise(SIGINT);
+	if (shutdownRequested)
+	{
+		ClientInput::cleanUpProcesses();
+		CleanUp::Client::cleanUpClient(ssl, ctx, socketfd);
+	}
+
 	return 0;
 }

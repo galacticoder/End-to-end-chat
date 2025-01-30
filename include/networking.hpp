@@ -87,7 +87,7 @@ public:
 		return sockfd;
 	}
 
-	static int startClientSocket(int port, const std::string &serverIpAddress)
+	static int startClientSocket(int port, const char *serverIpAddress)
 	{
 		int sockfd = socket(AF_INET, SOCK_STREAM, 0);
 		if (sockfd < 0)
@@ -100,7 +100,7 @@ public:
 		serverAddr.sin_family = AF_INET;
 		serverAddr.sin_port = htons(port);
 
-		if (inet_pton(AF_INET, serverIpAddress.c_str(), &serverAddr.sin_addr) <= 0)
+		if (inet_pton(AF_INET, serverIpAddress, &serverAddr.sin_addr) <= 0)
 		{
 			perror("Invalid address or address not supported");
 			exit(EXIT_FAILURE);

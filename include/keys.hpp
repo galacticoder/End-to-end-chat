@@ -186,6 +186,7 @@ public:
 		{
 			std::cerr << "Error loading private rsa key: ";
 			ERR_print_errors_fp(stderr);
+			EVP_PKEY_free(pkey);
 			return nullptr;
 		}
 
@@ -201,6 +202,7 @@ public:
 		if (!bio)
 		{
 			ERR_print_errors_fp(stderr);
+			BIO_free(bio);
 			std::cerr << fmt::format("Error loading public rsa key from path {}", publicKeyFile) << std::endl;
 			return nullptr;
 		}
@@ -211,6 +213,7 @@ public:
 		if (!pkey)
 		{
 			std::cerr << fmt::format("Error loading public rsa key from path {}", publicKeyFile) << std::endl;
+			EVP_PKEY_free(pkey);
 			return nullptr;
 		}
 
@@ -226,6 +229,7 @@ public:
 		if (!bio)
 		{
 			std::cerr << "Failed to create BIO for key data" << std::endl;
+			BIO_free(bio);
 			return nullptr;
 		}
 
@@ -233,7 +237,10 @@ public:
 		if (!publicKey)
 		{
 			std::cerr << "Failed to load public key from BIO" << std::endl;
+			BIO_free(bio);
+			EVP_PKEY_free(publicKey);
 			ERR_print_errors_fp(stderr);
+			return nullptr;
 		}
 
 		BIO_free(bio);

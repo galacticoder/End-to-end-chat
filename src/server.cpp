@@ -19,9 +19,6 @@
 #include "../include/send_receive.hpp"
 #include "../include/bcrypt.h"
 
-std::function<void(int)> shutdownHandler;
-void signalHandle(int signal) { shutdownHandler(signal); }
-
 void handleClient(SSL *ssl, int &clientSocket)
 {
 	ClientManagement::clientSSLSockets.push_back(ssl);
