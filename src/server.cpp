@@ -27,37 +27,12 @@ void handleClient(SSL *ssl, int &clientSocket)
 	ClientManagement::clientSSLSockets.push_back(ssl);
 
 	std::string clientUsername;
-	if ((clientUsername = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
-	{
-		CleanUp::Server::cleanUpClient(ssl, clientSocket, clientUsername);
+	if (clientUsername = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl); clientUsername.empty())
 		return;
-	}
 
-	if (!Validate::checkClientUsernameValidity(ssl, clientUsername))
+	if (!Validate::validateAndSetupClient(ssl, clientUsername))
 	{
-		CleanUp::Server::cleanUpClient(ssl, clientSocket, clientUsername);
-		return;
-	}
-
-	std::string clientPublicKey;
-	if ((clientPublicKey = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
-	{
-		CleanUp::Server::cleanUpClient(ssl, clientSocket, clientUsername);
-		return;
-	}
-
-	ClientManagement::clientPublicKeys[clientUsername] = clientPublicKey;
-	std::cout << "Public key: " << clientPublicKey << std::endl;
-
-	if (!Send::Server::sendAllPublicKeys(ssl, clientUsername, ClientManagement::clientPublicKeys))
-	{
-		CleanUp::Server::cleanUpClient(ssl, clientSocket, clientUsername);
-		return;
-	}
-
-	if (!Receive::Server::receiveAndSendEncryptedAesKey(ssl, ClientManagement::clientPublicKeys, ClientManagement::clientSSLSockets))
-	{
-		CleanUp::Server::cleanUpClient(ssl, clientSocket, clientUsername);
+		CleanUp::Server::cleanUpClient(ssl, clientSocket);
 		return;
 	}
 
@@ -71,8 +46,7 @@ void handleClient(SSL *ssl, int &clientSocket)
 			return;
 		}
 
-		message.append(fmt::format("|{}", clientUsername));
-		message.append(Signals::SignalManager::getSignalAsString(Signals::SignalType::CLIENTMESSAGE));
+		message.append(fmt::format("|{}", clientUsername) + Signals::SignalManager::getSignalAsString(Signals::SignalType::CLIENTMESSAGE));
 		std::cout << "Client message: " << message << std::endl;
 
 		if (!Send::Server::broadcastMessageToClients(ssl, message, ClientManagement::clientSSLSockets))

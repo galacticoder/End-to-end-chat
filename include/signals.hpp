@@ -111,16 +111,29 @@ private:
 		std::cout << Decode::base64Decode(extractedMessage) << std::endl;
 	};
 
+	static bool containsOnlyASCII(const std::string &message)
+	{
+		for (auto c : message)
+		{
+			if (static_cast<unsigned char>(c) > 127)
+				return false;
+		}
+		return true;
+	}
+
 	static void printServerMessage(std::string &message)
 	{
 		message = message.substr(0, message.size() - signalStringSizes[static_cast<size_t>(Signals::SignalType::SERVERMESSAGE)]);
 		message = Decode::base64Decode(message);
 
 		EVP_PKEY *privateKey = LoadKey::loadPrivateKey(FilePaths::clientPrivateKeyPath, false);
-		message = Decrypt::decryptDataRSA(privateKey, message);
+		std::string newMessage = Decrypt::decryptDataRSA(privateKey, message);
 		EVP_PKEY_free(privateKey);
 
-		std::cout << message << std::endl;
+		if (!containsOnlyASCII(newMessage))
+			return;
+
+		std::cout << newMessage << std::endl;
 	}
 
 	static void printClientMessage(std::string &message, CryptoPP::byte *key, size_t &keySize, CryptoPP::byte *iv, size_t &ivSize)

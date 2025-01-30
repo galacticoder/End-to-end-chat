@@ -8,19 +8,17 @@
 #include <openssl/err.h>
 #include "config.hpp"
 
-class CleanUp
+namespace CleanUp
 {
-public:
+	static void cleanUpOpenssl()
+	{
+		EVP_cleanup();
+		ERR_free_strings();
+		CRYPTO_cleanup_all_ex_data();
+	}
 	class Server
 	{
-	private:
-		static void cleanUpOpenssl()
-		{
-			EVP_cleanup();
-			ERR_free_strings();
-			CRYPTO_cleanup_all_ex_data();
-		}
-
+	protected:
 		static void freeAndDeleteSSLSocket(SSL *ssl)
 		{
 			if (ssl)
@@ -47,7 +45,6 @@ public:
 			std::cout << "ClientManagement::clientPublicKeys size before: " << ClientManagement::clientPublicKeys.size() << std::endl;
 
 			auto it = ClientManagement::clientPublicKeys.find(clientUsername);
-
 			if (it != ClientManagement::clientPublicKeys.end())
 				ClientManagement::clientPublicKeys.erase(it);
 
@@ -64,11 +61,13 @@ public:
 			std::cout << "Cleaned up client" << std::endl;
 		}
 	};
-	class Client
+
+	struct Client
 	{
 	public:
 		static void cleanUpClient()
 		{ // work on this soon
+			cleanUpOpenssl();
 			raise(SIGINT);
 		}
 	};

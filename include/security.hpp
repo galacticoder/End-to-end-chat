@@ -69,7 +69,6 @@ private:
 		return Signals::SignalManager::getSignalTypeFromMessage(signalMessage) == Signals::SignalType::INCORRECTPASSWORD ? false : true;
 	}
 
-public:
 	static bool checkClientUsernameValidity(SSL *ssl, const std::string &clientUsername)
 	{
 		std::string signalMessage;
@@ -98,11 +97,33 @@ public:
 		return Signals::SignalManager::getSignalTypeFromMessage(signalMessage) == Signals::SignalType::UNKNOWN ? true : false;
 	}
 
+public:
 	static bool handleClientPreChecks(SSL *ssl)
 	{
 		if (!checkServerUserLimit(ssl))
 			return false;
 		if (!checkAndVerifyServerPassword(ssl))
+			return false;
+
+		return true;
+	}
+
+	static bool validateAndSetupClient(SSL *ssl, const std::string &clientUsername)
+	{
+		if (!checkClientUsernameValidity(ssl, clientUsername))
+			return false;
+
+		std::string clientPublicKey;
+		if (clientPublicKey = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl); clientPublicKey.empty())
+			return false;
+
+		ClientManagement::clientPublicKeys[clientUsername] = clientPublicKey;
+		std::cout << "Public key: " << clientPublicKey;
+
+		if (!Send::Server::sendAllPublicKeys(ssl, clientUsername, ClientManagement::clientPublicKeys))
+			return false;
+
+		if (!Receive::Server::receiveAndSendEncryptedAesKey(ssl, ClientManagement::clientSSLSockets))
 			return false;
 
 		return true;
@@ -190,7 +211,7 @@ public:
 			handleNoPassword();
 			break;
 		case 0:
-			std::cout << "Exiting the setup menu." << std::endl;
+			std::cout << "Exiting." << std::endl;
 			break;
 		default:
 			std::cout << "Invalid choice. Exiting." << std::endl;

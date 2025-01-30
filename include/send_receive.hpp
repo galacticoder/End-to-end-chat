@@ -73,6 +73,9 @@ namespace Send
 
 					std::string encryptedExitMessage = Encode::base64Encode(Encrypt::encryptDataRSA(loadKey, exitMessage)).append(signalString);
 
+					std::cout << fmt::format("Exit message normal {}: {}", key, exitMessage) << std::endl;
+					std::cout << fmt::format("Exit message encrypted {}: {}", key, encryptedExitMessage) << std::endl;
+
 					EVP_PKEY_free(loadKey);
 
 					for (SSL *socket : clientSSLSockets)
@@ -145,7 +148,7 @@ namespace Receive
 
 	struct Server
 	{
-		static bool receiveAndSendEncryptedAesKey(SSL *ssl, std::map<std::string, std::string> &publicKeys, std::vector<SSL *> &clientSSLSockets)
+		static bool receiveAndSendEncryptedAesKey(SSL *ssl, std::vector<SSL *> &clientSSLSockets)
 		{
 			std::string amountOfUsers;
 			if (amountOfUsers = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl); amountOfUsers.empty())
