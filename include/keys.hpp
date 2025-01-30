@@ -23,6 +23,8 @@ class GenerateKeys
 public:
 	static void generateCertAndPrivateKey(const std::string &privateKeySavePath, const std::string &certSavePath)
 	{
+		std::cout << "Generating cert and private key..." << std::endl;
+
 		EVP_PKEY *pkey = nullptr;
 		X509 *x509 = nullptr;
 		EVP_PKEY_CTX *pctx = nullptr;

@@ -10,13 +10,14 @@
 #include "bcrypt.h"
 #include "signals.hpp"
 
+extern std::string username;
+
 class ClientValidation
 {
 private:
 	static bool validateUsernameAndSetKeyPaths(SSL *ssl)
 	{
 		std::cout << "Enter username: ";
-		std::string username;
 		std::getline(std::cin, username);
 
 		if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, username.data(), username.size()))

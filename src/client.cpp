@@ -6,6 +6,7 @@
 #include <arpa/inet.h>
 #include <fstream>
 #include <thread>
+#include <atomic>
 #include <vector>
 #include "../include/ssl.hpp"
 #include "../include/client_security.hpp"
@@ -17,37 +18,36 @@
 #include "../include/encryption.hpp"
 #include "../include/cleanup.hpp"
 
-std::function<void(int)> shutdownHandler;
-void signalHandle(int signal) { shutdownHandler(signal); }
-
-CryptoPP::byte key[CryptoPP::AES::MAX_KEYLENGTH]; // 32 bytes
-CryptoPP::byte iv[CryptoPP::AES::BLOCKSIZE];	  // 16 bytes
-
 std::vector<std::string> publicKeys;
+std::string username;
 
-void receiveMessages(SSL *ssl)
+std::atomic<bool> running{true};
+void receiveMessages(SSL *ssl, CryptoPP::byte *key, size_t keySize, CryptoPP::byte *iv, size_t ivSize)
 {
-	while (true)
+	while (running)
 	{
 		std::string message;
 		if (message = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl); message.empty())
 		{
+			running = false;
 			std::cout << "Server killed" << std::endl;
-			CleanUp::Client::cleanUpClient();
+			raise(SIGINT);
 		}
 
 		Signals::SignalType detectSignal = Signals::SignalManager::getSignalTypeFromMessage(message);
-		HandleSignal(detectSignal, message, key, sizeof(key), iv, sizeof(iv));
+		HandleSignal(detectSignal, message, key, keySize, iv, ivSize);
 	}
 }
 
 void communicateWithServer(SSL *ssl)
 {
+	CryptoPP::byte key[CryptoPP::AES::MAX_KEYLENGTH];
+	CryptoPP::byte iv[CryptoPP::AES::BLOCKSIZE];
+
 	if (!ClientValidation::clientAuthenticationAndKeyExchange(ssl, key, sizeof(key), iv, sizeof(iv), publicKeys))
 		return;
 
-	std::thread(receiveMessages, ssl).detach();
-	std::cout << "You can now chat" << std::endl;
+	std::thread(receiveMessages, ssl, key, sizeof(key), iv, sizeof(iv)).detach();
 
 	auto trimws = [&](std::string &str)
 	{
@@ -56,22 +56,26 @@ void communicateWithServer(SSL *ssl)
 		return str;
 	};
 
+	std::cout << "You can now chat" << std::endl;
+
 	while (1)
 	{
 		std::string message;
 		std::getline(std::cin, message);
 		message = trimws(message);
 
-		if (!message.empty())
+		if (message.empty())
 		{
 			std::cout << "\033[A";
-			std::cout << fmt::format("{}: {}", username, message) << std::endl;
-			std::string ciphertext = Encrypt::encryptDataAESGCM(message, key, sizeof(key));
-			if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, ciphertext.data(), ciphertext.size()))
-				break;
+			continue;
 		}
-		else
-			std::cout << "\033[A";
+
+		std::cout << "\033[A";
+		std::cout << fmt::format("{}: {}", username, message) << std::endl;
+
+		std::string ciphertext = Encrypt::encryptDataAESGCM(message, key, sizeof(key));
+		if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, ciphertext.data(), ciphertext.size()))
+			break;
 	}
 }
 
@@ -91,7 +95,6 @@ int main()
 	const int port = 8080;
 
 	int socketfd = Networking::startClientSocket(port, serverIpAddress);
-
 	std::signal(SIGINT, signalHandle);
 
 	SSL *ssl = SSL_new(ctx);
@@ -99,19 +102,10 @@ int main()
 
 	shutdownHandler = [&](int signal)
 	{
-		if (ssl)
-		{
-			SSL_shutdown(ssl);
-			SSL_free(ssl);
-		}
-		close(socketfd);
-
-		if (ctx)
-			SSL_CTX_free(ctx);
-
-		// DeletePath deleteKeysDirectory(FilePaths::keysDirectory);
-		FileSystem::deletePath(FilePaths::receivedKeysDirectory);
-		_exit(signal); // seg fault here
+		running = false;
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
+		CleanUp::Client::cleanUpClient(ssl, ctx, socketfd);
+		_exit(signal);
 	};
 
 	if (SSL_connect(ssl) <= 0)
@@ -122,11 +116,12 @@ int main()
 
 	std::string validateConnectionString;
 	if ((validateConnectionString = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
-		CleanUp::Client::cleanUpClient();
+		raise(SIGINT);
+
 	HandleSignal(Signals::SignalManager::getSignalTypeFromMessage(validateConnectionString), validateConnectionString);
 
 	communicateWithServer(ssl);
 
-	CleanUp::Client::cleanUpClient();
+	raise(SIGINT);
 	return 0;
 }

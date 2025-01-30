@@ -7,6 +7,7 @@
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include "config.hpp"
+#include "file_handling.hpp"
 
 namespace CleanUp
 {
@@ -62,13 +63,41 @@ namespace CleanUp
 		}
 	};
 
-	struct Client
+	class Client
 	{
+	private:
+		static void freeAndCloseSockets(SSL *ssl, int &socket)
+		{
+			if (ssl)
+			{
+				SSL_shutdown(ssl);
+				SSL_free(ssl);
+				ssl = nullptr;
+			}
+			if (socket != -1)
+			{
+				close(socket);
+				socket = -1;
+			}
+		}
+
+		static void freeCTX(SSL_CTX *ctx)
+		{
+			if (ctx)
+			{
+				SSL_CTX_free(ctx);
+				ctx = nullptr;
+			}
+		}
+
 	public:
-		static void cleanUpClient()
-		{ // work on this soon
+		static void cleanUpClient(SSL *ssl, SSL_CTX *ctx, int &socket)
+		{
 			cleanUpOpenssl();
-			raise(SIGINT);
+			freeAndCloseSockets(ssl, socket);
+			freeCTX(ctx);
+			// FileSystem::deletePath(FilePaths::keysDirectory);
+			FileSystem::deletePath(FilePaths::receivedKeysDirectory);
 		}
 	};
 };

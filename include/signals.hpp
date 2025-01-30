@@ -9,6 +9,9 @@
 #include "file_handling.hpp"
 #include "keys.hpp"
 
+std::function<void(int)> shutdownHandler;
+void signalHandle(int signal) { shutdownHandler(signal); }
+
 namespace Signals
 {
 	enum class SignalType
