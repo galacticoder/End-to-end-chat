@@ -8,6 +8,8 @@
 #include "encryption.hpp"
 #include "bcrypt.h"
 
+extern std::string clientUsername;
+
 class Validate
 {
 private:
@@ -108,8 +110,11 @@ public:
 		return true;
 	}
 
-	static bool validateAndSetupClient(SSL *ssl, const std::string &clientUsername)
+	static bool validateAndSetupClient(SSL *ssl)
 	{
+		if (clientUsername = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl); clientUsername.empty())
+			return false;
+
 		if (!checkClientUsernameValidity(ssl, clientUsername))
 			return false;
 

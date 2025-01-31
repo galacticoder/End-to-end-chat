@@ -29,17 +29,12 @@ constexpr int PORT = 8080;
 std::vector<std::string> publicKeys;
 std::string username;
 
-std::atomic<bool> threadRunning{true};
-std::atomic<bool> shutdownRequested{false};
-std::mutex ssl_mutex;
-std::condition_variable ssl_cv;
-
 void receiveMessages(SSL *ssl, CryptoPP::byte *key, size_t keySize, CryptoPP::byte *iv, size_t ivSize)
 {
 	const int sslfd = SSL_get_fd(ssl);
 	struct timeval timeout = {0, 100000};
 
-	while (threadRunning)
+	while (ClientSync::threadRunning)
 	{
 		fd_set readfds;
 		FD_ZERO(&readfds);
@@ -55,13 +50,13 @@ void receiveMessages(SSL *ssl, CryptoPP::byte *key, size_t keySize, CryptoPP::by
 				break;
 			}
 
-			Signals::SignalType detectSignal = Signals::SignalManager::getSignalTypeFromMessage(message);
-			HandleSignal(detectSignal, message, key, keySize, iv, ivSize);
+			Signals::SignalType getMessageType = Signals::SignalManager::getSignalTypeFromMessage(message);
+			HandleSignal(getMessageType, message, key, keySize, iv, ivSize);
 		}
 	}
 
 	raise(SIGINT);
-	ssl_cv.notify_one();
+	ClientSync::ssl_cv.notify_one();
 }
 
 void communicateWithServer(SSL *ssl)
@@ -74,19 +69,13 @@ void communicateWithServer(SSL *ssl)
 
 	std::thread receiveMessageThread(receiveMessages, ssl, key, sizeof(key), iv, sizeof(iv));
 
-	auto trimws = [&](std::string *str)
-	{
-		(*str).erase(0, (*str).find_first_not_of(" \t\n\r"));
-		(*str).erase((*str).find_last_not_of(" \t\n\r") + 1);
-	};
-
 	std::cout << "You can now chat" << std::endl;
 
 	ClientInput::startMessageInput();
-	while (threadRunning)
+	while (ClientSync::threadRunning)
 	{
-		std::string message = ClientInput::receiveMessage();
-		trimws(&message);
+		std::string message = ClientInput::typeAndReceiveMessageBack();
+		ClientInput::trimws(&message);
 
 		if (!message.empty())
 		{
@@ -98,7 +87,7 @@ void communicateWithServer(SSL *ssl)
 		}
 	}
 
-	ssl_cv.notify_one();
+	ClientSync::ssl_cv.notify_one();
 	receiveMessageThread.join();
 }
 
@@ -121,12 +110,12 @@ int main()
 
 	shutdownHandler = [&](int signal)
 	{
-		shutdownRequested = true;
+		ClientSync::shutdownRequested = true;
 		{
-			std::unique_lock<std::mutex> lock(ssl_mutex);
-			threadRunning = false;
+			std::unique_lock<std::mutex> lock(ClientSync::ssl_mutex);
+			ClientSync::threadRunning = false;
 		}
-		ssl_cv.notify_one();
+		ClientSync::ssl_cv.notify_one();
 	};
 
 	std::signal(SIGINT, signalHandle);
@@ -145,7 +134,7 @@ int main()
 
 	communicateWithServer(ssl);
 
-	if (shutdownRequested)
+	if (ClientSync::shutdownRequested)
 	{
 		ClientInput::cleanUpProcesses();
 		CleanUp::Client::cleanUpClient(ssl, ctx, socketfd);

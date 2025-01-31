@@ -67,10 +67,10 @@ namespace Send
 			return true;
 		}
 
-		static void broadcastClientExitMessage(SSL *ssl, const std::string &clientUsername, std::map<std::string, std::string> &clientPublicKeys, std::vector<SSL *> &clientSSLSockets, const std::string &signalString)
+		static void broadcastClientJoinOrExitMessage(SSL *ssl, const std::string &clientUsername, std::map<std::string, std::string> &clientPublicKeys, std::vector<SSL *> &clientSSLSockets, const std::string &signalString, const bool isJoining)
 		{
-			std::string exitMessage = fmt::format("{} has left the chat", clientUsername);
-			std::cout << fmt::format("Broadcasting client exit message: {}", exitMessage) << std::endl;
+			std::string message = fmt::format("{} has {} the chat", clientUsername, isJoining ? "joined" : "left");
+			std::cout << fmt::format("Broadcasting client {} message: {}", isJoining ? "join" : "exit", message) << std::endl;
 
 			for (auto const &[key, val] : clientPublicKeys)
 			{
@@ -78,13 +78,13 @@ namespace Send
 				{
 					EVP_PKEY *loadKey = LoadKey::loadPublicKeyInMemory(val);
 
-					std::string encryptedExitMessage = Encode::base64Encode(Encrypt::encryptDataRSA(loadKey, exitMessage)).append(signalString);
+					std::string encryptedMessage = Encode::base64Encode(Encrypt::encryptDataRSA(loadKey, message)).append(signalString);
 
 					EVP_PKEY_free(loadKey);
 
 					for (SSL *socket : clientSSLSockets)
 						if (socket != ssl)
-							if (!sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(socket, encryptedExitMessage.data(), encryptedExitMessage.size()))
+							if (!sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(socket, encryptedMessage.data(), encryptedMessage.size()))
 								return;
 				}
 			}

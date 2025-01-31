@@ -14,23 +14,35 @@
 #include <future>
 #include <signal.h>
 
-extern std::atomic<bool> threadRunning;
-
 int pipefd[2];
 pid_t child_pid;
 
+namespace ClientSync
+{
+	std::atomic<bool> threadRunning{true};
+	std::atomic<bool> shutdownRequested{false};
+	std::mutex ssl_mutex;
+	std::condition_variable ssl_cv;
+};
+
 namespace ClientInput
 {
+	void trimws(std::string *str)
+	{
+		(*str).erase(0, (*str).find_first_not_of(" \t\n\r"));
+		(*str).erase((*str).find_last_not_of(" \t\n\r") + 1);
+	};
+
 	void messageInput(int writePipe)
 	{
-		while (threadRunning)
+		while (ClientSync::threadRunning)
 		{
 			std::string line;
 
 			if (!std::getline(std::cin, line))
 				break;
 
-			if (!threadRunning)
+			if (!ClientSync::threadRunning)
 				break;
 
 			if (write(writePipe, line.c_str(), line.size()) == -1)
@@ -77,7 +89,7 @@ namespace ClientInput
 		}
 	}
 
-	std::string receiveMessage()
+	std::string typeAndReceiveMessageBack()
 	{
 		char buffer[256];
 		fd_set readfds;
@@ -95,7 +107,7 @@ namespace ClientInput
 			if (errno == EINTR)
 				return "";
 			perror("select");
-			threadRunning = false;
+			ClientSync::threadRunning = false;
 			return "";
 		}
 		else if (retval > 0)
@@ -108,13 +120,13 @@ namespace ClientInput
 			}
 			else if (bytesRead == 0)
 			{
-				threadRunning = false;
+				ClientSync::threadRunning = false;
 				return "";
 			}
 			else
 			{
 				perror("Parent read");
-				threadRunning = false;
+				ClientSync::threadRunning = false;
 				return "";
 			}
 		}

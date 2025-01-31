@@ -19,26 +19,27 @@
 #include "../include/send_receive.hpp"
 #include "../include/bcrypt.h"
 
+std::string clientUsername;
+
 void handleClient(SSL *ssl, int &clientSocket)
 {
 	ClientManagement::clientSSLSockets.push_back(ssl);
 
-	std::string clientUsername;
-	if (clientUsername = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl); clientUsername.empty())
-		return;
-
-	if (!Validate::validateAndSetupClient(ssl, clientUsername))
+	if (!Validate::validateAndSetupClient(ssl))
 	{
 		CleanUp::Server::cleanUpClient(ssl, clientSocket);
 		return;
 	}
+
+	Send::Server::broadcastClientJoinOrExitMessage(ssl, clientUsername, ClientManagement::clientPublicKeys, ClientManagement::clientSSLSockets, Signals::SignalManager::getSignalAsString(Signals::SignalType::SERVERMESSAGE), true); // send join message
 
 	while (1)
 	{
 		std::string message;
 		if ((message = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
 		{
-			Send::Server::broadcastClientExitMessage(ssl, clientUsername, ClientManagement::clientPublicKeys, ClientManagement::clientSSLSockets, Signals::SignalManager::getSignalAsString(Signals::SignalType::SERVERMESSAGE));
+			Send::Server::broadcastClientJoinOrExitMessage(ssl, clientUsername, ClientManagement::clientPublicKeys, ClientManagement::clientSSLSockets, Signals::SignalManager::getSignalAsString(Signals::SignalType::SERVERMESSAGE), false);
+
 			CleanUp::Server::cleanUpClient(ssl, clientSocket, clientUsername);
 			return;
 		}
@@ -71,6 +72,8 @@ int main()
 	shutdownHandler = [&](int signal)
 	{
 		std::cout << fmt::format("\nSignal {} caught. Killing server", strsignal(signal)) << std::endl;
+		CleanUp::cleanUpOpenssl();
+		// clean up clients here from vectors ssl
 		close(serverSocket);
 		SSL_CTX_free(ctx);
 		FileSystem::deletePath(FilePaths::keysDirectory);
@@ -78,8 +81,6 @@ int main()
 	};
 
 	std::signal(SIGINT, signalHandle);
-
-	GenerateKeys::generateRSAKeys(FilePaths::serverPrivateKeyPath, FilePaths::serverPublicKeyPath);
 
 	while (1)
 	{
@@ -100,10 +101,5 @@ int main()
 		std::thread(handleClient, ssl, std::ref(clientSocket)).detach();
 	}
 
-	close(serverSocket);
-	SSL_CTX_free(ctx);
-	FileSystem::deletePath(FilePaths::keysDirectory);
-
-	std::cout << "Cleaned up server" << std::endl;
 	return 0;
 }
