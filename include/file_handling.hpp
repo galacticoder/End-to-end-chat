@@ -10,22 +10,10 @@
 namespace FilePaths
 {
 	inline const std::string keysDirectory = "../keys/";
-	inline const std::string receivedKeysDirectory = "../received_keys/";
 	inline const std::string serverPrivateKeyPath = keysDirectory + "serverPrivateKey.key";
-	inline const std::string serverPublicKeyPath = keysDirectory + "serverPublicKey.key";
 	inline const std::string serverCertPath = keysDirectory + "serverCert.crt";
 	inline const std::string clientPrivateKeyCertPath = keysDirectory + "clientPrivateKeyCert.key";
 	inline const std::string clientCertPath = keysDirectory + "clientCert.crt";
-	inline const std::string clientServerPublicKeyPath = receivedKeysDirectory + "serverPublicKey.pem";
-
-	inline std::string clientPrivateKeyPath;
-	inline std::string clientPublicKeyPath;
-
-	inline void setKeyPaths(const std::string &username)
-	{
-		clientPrivateKeyPath = fmt::format("{}{}PrivateKey.pem", keysDirectory, username);
-		clientPublicKeyPath = fmt::format("{}{}PublicKey.pem", keysDirectory, username);
-	}
 }
 
 namespace FileSystem

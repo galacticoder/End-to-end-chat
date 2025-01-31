@@ -47,6 +47,7 @@ void handleClient(SSL *ssl, int &clientSocket)
 		}
 
 		message.append(fmt::format("|{}", clientUsername) + Signals::SignalManager::getSignalAsString(Signals::SignalType::CLIENTMESSAGE));
+
 		std::cout << "Client message: " << message << std::endl;
 
 		if (!Send::Server::broadcastMessageToClients(ssl, message, ClientManagement::clientSSLSockets, ClientManagement::clientPublicKeys))
@@ -59,8 +60,6 @@ void handleClient(SSL *ssl, int &clientSocket)
 
 int main()
 {
-	SetServerPassword setServerPassword;
-
 	SSLSetup::initOpenssl();
 
 	FileSystem::createDirectory(FilePaths::keysDirectory);
@@ -71,11 +70,11 @@ int main()
 
 	int serverSocket = Networking::startServerSocket(Networking::findAvailablePort());
 
-	shutdownHandler = [&](int signal)
+	shutdownHandler = [&]()
 	{
-		std::cout << fmt::format("\nSignal {} caught. Killing server", strsignal(signal)) << std::endl;
+		std::cout << fmt::format("\nKilling server") << std::endl;
 		CleanUp::Server::cleanUpServer(ctx, serverSocket);
-		exit(signal);
+		exit(1);
 	};
 
 	std::signal(SIGINT, signalHandle);

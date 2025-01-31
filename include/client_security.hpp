@@ -31,16 +31,16 @@ private:
 		Signals::SignalType getSignal = Signals::SignalManager::getSignalTypeFromMessage(validateUsername);
 		HandleSignal(getSignal, validateUsername);
 
-		FilePaths::setKeyPaths(username);
 		return true;
 	}
 
 	static bool makeAndSendKeys(SSL *ssl, CryptoPP::byte *key, size_t keySize, CryptoPP::byte *iv, size_t ivSize, std::vector<std::string> &publicKeys)
 	{
-		GenerateKeys::generateRSAKeys(FilePaths::clientPrivateKeyPath, FilePaths::clientPublicKeyPath);
+		const std::string privateKeyString = GenerateKeys::generateRSAPrivateKey();
+		const std::string publicKeyString = GenerateKeys::generateRSAPublicKey(LoadKey::loadPrivateKeyInMemory(privateKeyString));
+		ClientKeys::setKeys(privateKeyString, publicKeyString);
 
-		const std::string publicKeyData = FileIO::readFileContents(FilePaths::clientPublicKeyPath);
-		if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, publicKeyData.data(), publicKeyData.size()))
+		if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, publicKeyString.data(), publicKeyString.size()))
 			return false;
 
 		CryptoPP::GCM<CryptoPP::AES>::Encryption setKey;

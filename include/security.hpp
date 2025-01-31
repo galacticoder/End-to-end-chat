@@ -6,7 +6,6 @@
 #include "signals.hpp"
 #include "send_receive.hpp"
 #include "encryption.hpp"
-#include "bcrypt.h"
 
 class Validate
 {
@@ -17,56 +16,15 @@ private:
 
 		if (ClientManagement::clientSSLSockets.size() >= ServerConfig::SERVER_USER_LIMIT)
 			signalMessage = Signals::SignalManager::getSignalMessageWithSignalStringAppended(Signals::SignalType::SERVERLIMIT);
-
-		Signals::SignalManager::printSignalServerMessage(Signals::SignalManager::getSignalTypeFromMessage(signalMessage));
-
-		if (!signalMessage.empty())
-			if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, signalMessage.data(), signalMessage.size()))
-				return false;
-
-		return signalMessage.empty() ? true : false;
-	}
-
-	static bool checkAndVerifyServerPassword(SSL *ssl)
-	{
-		std::string signalMessage = Signals::SignalManager::getSignalMessageWithSignalStringAppended(ServerConfig::SERVER_HASHED_PASSWORD.empty() ? Signals::SignalType::PASSWORDNOTNEEDED : Signals::SignalType::PASSWORDNEEDED);
-
-		Signals::SignalManager::printSignalServerMessage(Signals::SignalManager::getSignalTypeFromMessage(signalMessage));
-
-		if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, signalMessage.data(), signalMessage.size()))
-			return false;
-
-		if (ServerConfig::SERVER_HASHED_PASSWORD.empty() && !ServerConfig::PASSWORD_REQUIRED) // check if server even has a password then it exits with true if not
-			return true;
-
-		std::string receivedPassword;
-		if ((receivedPassword = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl)).empty())
-			return false;
-
-		std::cout << "Hashed password received: " << receivedPassword << std::endl;
-
-		EVP_PKEY *serverPrivateKey = LoadKey::loadPrivateKey(FilePaths::serverPrivateKeyPath);
-
-		if (!serverPrivateKey)
-			return false;
-
-		receivedPassword = Decrypt::decryptDataRSA(serverPrivateKey, Decode::base64Decode(receivedPassword));
-
-		EVP_PKEY_free(serverPrivateKey);
-
-		std::cout << "Validating password sent by client" << std::endl;
-
-		if (!bcrypt::validatePassword(receivedPassword, ServerConfig::SERVER_HASHED_PASSWORD))
-			signalMessage = Signals::SignalManager::getSignalMessageWithSignalStringAppended(Signals::SignalType::INCORRECTPASSWORD);
 		else
-			signalMessage = Signals::SignalManager::getSignalMessageWithSignalStringAppended(Signals::SignalType::CORRECTPASSWORD);
+			signalMessage = Signals::SignalManager::getSignalMessageWithSignalStringAppended(Signals::SignalType::UNKNOWN);
 
 		Signals::SignalManager::printSignalServerMessage(Signals::SignalManager::getSignalTypeFromMessage(signalMessage));
 
 		if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, signalMessage.data(), signalMessage.size()))
 			return false;
 
-		return Signals::SignalManager::getSignalTypeFromMessage(signalMessage) == Signals::SignalType::INCORRECTPASSWORD ? false : true;
+		return Signals::SignalManager::getSignalTypeFromMessage(signalMessage) == Signals::SignalType::UNKNOWN ? true : false;
 	}
 
 	static bool checkClientUsernameValidity(SSL *ssl, const std::string &clientUsername)
@@ -102,8 +60,6 @@ public:
 	{
 		if (!checkServerUserLimit(ssl))
 			return false;
-		if (!checkAndVerifyServerPassword(ssl))
-			return false;
 
 		return true;
 	}
@@ -127,95 +83,5 @@ public:
 			return false;
 
 		return true;
-	}
-};
-
-class SetServerPassword
-{
-private:
-	void printPasswordMenu() const
-	{
-		std::cout << "=== Password Menu ===" << std::endl;
-		std::cout << "1: Set a password for the server" << std::endl;
-		std::cout << "2: Do not set a password for the server" << std::endl;
-		std::cout << "0: Exit" << std::endl;
-		std::cout << "Enter your choice: ";
-	}
-
-	std::string trimPassword(std::string &password) const
-	{
-		password.erase(password.begin(), std::find_if(password.begin(), password.end(), [](unsigned char ch)
-													  { return !std::isspace(ch); }));
-		password.erase(std::find_if(password.rbegin(), password.rend(), [](unsigned char ch)
-									{ return !std::isspace(ch); })
-						   .base(),
-					   password.end());
-
-		return password;
-	}
-
-	void handleSetPassword() const
-	{
-		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-		std::cout << "Enter password to set: ";
-		std::string password;
-		std::getline(std::cin, password);
-
-		password = trimPassword(password);
-
-		if (password.empty())
-		{
-			std::cout << "Password cannot be empty. Exiting." << std::endl;
-			exit(EXIT_FAILURE);
-		}
-
-		ServerConfig::PASSWORD_REQUIRED = true;
-		ServerConfig::SERVER_HASHED_PASSWORD = bcrypt::generateHash(password);
-
-		password.clear();
-		std::cout << "Server password has been set. Password Hash: " << ServerConfig::SERVER_HASHED_PASSWORD << std::endl;
-	}
-
-	void handleNoPassword() const
-	{
-		ServerConfig::PASSWORD_REQUIRED = false;
-		std::cout << "Server has started up without a password." << std::endl;
-	}
-
-	int getValidatedChoice() const
-	{
-		int choice;
-		std::cin >> choice;
-
-		if (std::cin.fail())
-		{
-			std::cout << "Invalid input. Exiting." << std::endl;
-			exit(EXIT_FAILURE);
-		}
-
-		return choice;
-	}
-
-public:
-	SetServerPassword()
-	{
-		printPasswordMenu();
-		int choice = getValidatedChoice();
-
-		switch (choice)
-		{
-		case 1:
-			handleSetPassword();
-			break;
-		case 2:
-			handleNoPassword();
-			break;
-		case 0:
-			std::cout << "Exiting." << std::endl;
-			break;
-		default:
-			std::cout << "Invalid choice. Exiting." << std::endl;
-			exit(EXIT_FAILURE);
-		}
 	}
 };

@@ -18,6 +18,19 @@
 
 #define KEYSIZE 4096
 
+namespace ClientKeys
+{
+	static inline std::string clientPrivateKeyString;
+	static inline std::string clientPublicKeyString;
+
+	void setKeys(const std::string &privateKeyString, const std::string &publicKeyString)
+	{
+		clientPrivateKeyString = privateKeyString;
+		clientPublicKeyString = publicKeyString;
+		std::cout << "Set RSA keys" << std::endl;
+	}
+}
+
 class GenerateKeys
 {
 public:
@@ -111,9 +124,8 @@ public:
 		std::cout << "Generated cert and private key" << std::endl;
 	}
 
-	static void generateRSAKeys(const std::string &privateKeyFile, const std::string &publicKeyFile, int bits = KEYSIZE)
+	static std::string generateRSAPrivateKey(int bits = KEYSIZE)
 	{
-		std::cout << "Generating keys.." << std::endl;
 		EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new_id(EVP_PKEY_RSA, NULL);
 		if (!ctx)
 		{
@@ -121,21 +133,14 @@ public:
 			exit(EXIT_FAILURE);
 		}
 
-		if (EVP_PKEY_keygen_init(ctx) <= 0)
+		if (EVP_PKEY_keygen_init(ctx) <= 0 || EVP_PKEY_CTX_set_rsa_keygen_bits(ctx, bits) <= 0)
 		{
 			ERR_print_errors_fp(stderr);
 			EVP_PKEY_CTX_free(ctx);
 			exit(EXIT_FAILURE);
 		}
 
-		if (EVP_PKEY_CTX_set_rsa_keygen_bits(ctx, bits) <= 0)
-		{
-			ERR_print_errors_fp(stderr);
-			EVP_PKEY_CTX_free(ctx);
-			exit(EXIT_FAILURE);
-		}
-
-		EVP_PKEY *pkey = NULL;
+		EVP_PKEY *pkey = nullptr;
 		if (EVP_PKEY_keygen(ctx, &pkey) <= 0)
 		{
 			ERR_print_errors_fp(stderr);
@@ -145,17 +150,52 @@ public:
 
 		EVP_PKEY_CTX_free(ctx);
 
-		BIO *privateKeyBio = BIO_new_file(privateKeyFile.c_str(), "w+");
-		PEM_write_bio_PrivateKey(privateKeyBio, pkey, NULL, NULL, 0, NULL, NULL);
-		BIO_free_all(privateKeyBio);
+		BIO *bio = BIO_new(BIO_s_mem());
+		if (!bio)
+		{
+			EVP_PKEY_free(pkey);
+			exit(EXIT_FAILURE);
+		}
 
-		BIO *publicKeyBio = BIO_new_file(publicKeyFile.c_str(), "w+");
-		PEM_write_bio_PUBKEY(publicKeyBio, pkey);
-		BIO_free_all(publicKeyBio);
+		if (!PEM_write_bio_PrivateKey(bio, pkey, NULL, NULL, 0, NULL, NULL))
+		{
+			ERR_print_errors_fp(stderr);
+			BIO_free(bio);
+			EVP_PKEY_free(pkey);
+			exit(EXIT_FAILURE);
+		}
 
+		char *buffer;
+		long len = BIO_get_mem_data(bio, &buffer);
+		std::string privateKey(buffer, len);
+
+		BIO_free(bio);
 		EVP_PKEY_free(pkey);
 
-		std::cout << "Generated RSA Keys" << std::endl;
+		return privateKey;
+	}
+
+	static std::string generateRSAPublicKey(EVP_PKEY *pkey)
+	{
+		BIO *bio = BIO_new(BIO_s_mem());
+		if (!bio)
+		{
+			exit(EXIT_FAILURE);
+		}
+
+		if (!PEM_write_bio_PUBKEY(bio, pkey))
+		{
+			ERR_print_errors_fp(stderr);
+			BIO_free(bio);
+			exit(EXIT_FAILURE);
+		}
+
+		char *buffer;
+		long len = BIO_get_mem_data(bio, &buffer);
+		std::string publicKey(buffer, len);
+
+		BIO_free(bio);
+		return publicKey;
 	}
 
 	static void generateKeyAESGCM(CryptoPP::byte *key, CryptoPP::byte *iv)
@@ -169,60 +209,6 @@ public:
 class LoadKey
 {
 public:
-	static EVP_PKEY *loadPrivateKey(const std::string &privateKeyFile, const bool echo = true)
-	{
-		BIO *bio = BIO_new_file(privateKeyFile.c_str(), "r");
-		if (!bio)
-		{
-			std::cerr << "Error loading private rsa key: ";
-			ERR_print_errors_fp(stderr);
-			return nullptr;
-		}
-
-		EVP_PKEY *pkey = PEM_read_bio_PrivateKey(bio, nullptr, nullptr, nullptr);
-		BIO_free(bio);
-
-		if (!pkey)
-		{
-			std::cerr << "Error loading private rsa key: ";
-			ERR_print_errors_fp(stderr);
-			EVP_PKEY_free(pkey);
-			return nullptr;
-		}
-
-		if (echo)
-			std::cout << fmt::format("Loaded RSA Private key file ({}) successfully", privateKeyFile) << std::endl;
-
-		return pkey;
-	}
-
-	static EVP_PKEY *loadPublicKey(const std::string &publicKeyFile, const bool echo = true)
-	{
-		BIO *bio = BIO_new_file(publicKeyFile.c_str(), "r");
-		if (!bio)
-		{
-			ERR_print_errors_fp(stderr);
-			BIO_free(bio);
-			std::cerr << fmt::format("Error loading public rsa key from path {}", publicKeyFile) << std::endl;
-			return nullptr;
-		}
-
-		EVP_PKEY *pkey = PEM_read_bio_PUBKEY(bio, nullptr, nullptr, nullptr);
-		BIO_free(bio);
-
-		if (!pkey)
-		{
-			std::cerr << fmt::format("Error loading public rsa key from path {}", publicKeyFile) << std::endl;
-			EVP_PKEY_free(pkey);
-			return nullptr;
-		}
-
-		if (echo)
-			std::cout << fmt::format("Loaded RSA Public key file ({}) successfully", publicKeyFile) << std::endl;
-
-		return pkey;
-	}
-
 	static EVP_PKEY *loadPublicKeyInMemory(const std::string &keyData)
 	{
 		BIO *bio = BIO_new_mem_buf(keyData.data(), static_cast<int>(keyData.size()));
@@ -245,5 +231,26 @@ public:
 
 		BIO_free(bio);
 		return publicKey;
+	}
+
+	static EVP_PKEY *loadPrivateKeyInMemory(const std::string &privateKeyStr)
+	{
+		BIO *bio = BIO_new_mem_buf(privateKeyStr.c_str(), -1);
+		if (!bio)
+		{
+			std::cerr << "Failed to create BIO buffer." << std::endl;
+			return nullptr;
+		}
+
+		EVP_PKEY *pkey = PEM_read_bio_PrivateKey(bio, nullptr, nullptr, nullptr);
+		BIO_free(bio);
+
+		if (!pkey)
+		{
+			std::cerr << "Failed to load private key from string." << std::endl;
+			ERR_print_errors_fp(stderr);
+		}
+
+		return pkey;
 	}
 };

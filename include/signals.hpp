@@ -9,8 +9,8 @@
 #include "file_handling.hpp"
 #include "keys.hpp"
 
-std::function<void(int)> shutdownHandler;
-void signalHandle(int signal) { shutdownHandler(signal); }
+std::function<void()> shutdownHandler;
+void signalHandle(int signal) { shutdownHandler(); }
 
 namespace Signals
 {
@@ -21,8 +21,6 @@ namespace Signals
 		NAMEEXISTSERR,
 		RATELIMITED,
 		SERVERLIMIT,
-		PASSWORDNEEDED,
-		PASSWORDNOTNEEDED,
 		INVALIDNAME,
 		INVALIDNAMELENGTH,
 		BLACKLISTED,
@@ -38,12 +36,12 @@ namespace Signals
 		static inline std::vector<size_t> signalStringSizes;
 
 		static inline std::vector<std::string> signalStringsVector = {
-			"CORRECTPASSWORD", "INCORRECTPASSWORD", "NAMEEXISTSERR", "RATELIMITED", "USERLIMITREACHED", "PASSWORDNEEDED", "PASSWORDNOTNEEDED", "INVALIDNAMECHARS", "INVALIDNAMELENGTH", "BLACKLISTED", "NEWAESKEY", "CLIENTMESSAGE", "SERVERMESSAGE", "UNKNOWN"};
+			"CORRECTPASSWORD", "INCORRECTPASSWORD", "NAMEEXISTSERR", "RATELIMITED", "USERLIMITREACHED", "INVALIDNAMECHARS", "INVALIDNAMELENGTH", "BLACKLISTED", "NEWAESKEY", "CLIENTMESSAGE", "SERVERMESSAGE", "UNKNOWN"};
 
-		static inline std::vector<std::string> serverSidePrintSignalMessageVector = {"Client entered the correct server password.", "Client entered incorrect server password.", "Client attempted to join with username that already exists.", "Client attempted to join while rate limited.", "Client attempted to join past server user limit set.", "Sent client password needed signal. Waiting for password...", "Server set without password.", "Client username contains invalid characters.", "Client username is an invalid length.", "Blacklisted client attempted to join server."};
+		static inline std::vector<std::string> serverSidePrintSignalMessageVector = {"Client entered the correct server password.", "Client entered incorrect server password.", "Client attempted to join with username that already exists.", "Client attempted to join while rate limited.", "Client attempted to join past server user limit set.", "Client username contains invalid characters.", "Client username is an invalid length.", "Blacklisted client attempted to join server."};
 
 		static inline std::vector<std::string> serverMessages = {
-			"Correct password entered.", "Wrong password. You have been kicked.", "Username already exists on server.", "Rate limit reached. Try again later.", "User limit reached. Exiting.", "Enter the server password to join.", "Welcome to the server.", "Username contains invalid characters.", "Username is an invalid length", "You are blacklisted from the server.", "", "", "", ""};
+			"Correct password entered.", "Wrong password. You have been kicked.", "Username already exists on server.", "Rate limit reached. Try again later.", "User limit reached. Exiting.", "Username contains invalid characters.", "Username is an invalid length", "You are blacklisted from the server.", "", "", "", ""};
 
 	public:
 		SignalManager()
@@ -128,7 +126,7 @@ private:
 		message = message.substr(0, message.size() - signalStringSizes[static_cast<size_t>(Signals::SignalType::SERVERMESSAGE)]);
 		message = Decode::base64Decode(message);
 
-		EVP_PKEY *privateKey = LoadKey::loadPrivateKey(FilePaths::clientPrivateKeyPath, false);
+		EVP_PKEY *privateKey = LoadKey::loadPrivateKeyInMemory(ClientKeys::clientPrivateKeyString);
 		std::string newMessage = Decrypt::decryptDataRSA(privateKey, message);
 		EVP_PKEY_free(privateKey);
 
@@ -155,7 +153,7 @@ private:
 		message = message.substr(0, message.size() - Signals::SignalManager::getSignalAsString(Signals::SignalType::NEWAESKEY).size());
 		message = Decode::base64Decode(message);
 
-		EVP_PKEY *privateKey = LoadKey::loadPrivateKey(FilePaths::clientPrivateKeyPath, false);
+		EVP_PKEY *privateKey = LoadKey::loadPrivateKeyInMemory(ClientKeys::clientPrivateKeyString);
 		message = Decrypt::decryptDataRSA(privateKey, message);
 		EVP_PKEY_free(privateKey);
 
@@ -171,7 +169,6 @@ public:
 		case Signals::SignalType::UNKNOWN:
 			return;
 			break;
-		case Signals::SignalType::PASSWORDNOTNEEDED:
 		case Signals::SignalType::CORRECTPASSWORD:
 			printSignalMessage(signalType, message);
 			break;
@@ -184,8 +181,6 @@ public:
 		case Signals::SignalType::BLACKLISTED:
 			printSignalMessage(signalType, message);
 			raise(SIGINT); // handled by the shutdownHandler
-			break;
-		case Signals::SignalType::PASSWORDNEEDED:
 			break;
 		case Signals::SignalType::NEWAESKEY:
 			setNewAesKey(message, key, keySize, iv, ivSize);

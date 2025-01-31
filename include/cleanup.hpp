@@ -7,6 +7,7 @@
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include "config.hpp"
+#include "client_input.hpp"
 #include "file_handling.hpp"
 
 namespace CleanUp
@@ -17,6 +18,7 @@ namespace CleanUp
 		ERR_free_strings();
 		CRYPTO_cleanup_all_ex_data();
 	}
+
 	class Server
 	{
 	private:
@@ -118,8 +120,7 @@ namespace CleanUp
 			cleanUpOpenssl();
 			freeAndCloseSockets(ssl, socket);
 			freeCTX(ctx);
-			// FileSystem::deletePath(FilePaths::keysDirectory);
-			FileSystem::deletePath(FilePaths::receivedKeysDirectory);
+			FileSystem::deletePath(FilePaths::keysDirectory);
 		}
 	};
 };

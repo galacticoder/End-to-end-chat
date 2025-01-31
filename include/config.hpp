@@ -16,7 +16,5 @@ public:
 	static const size_t SERVER_USER_LIMIT = 9;
 	static inline size_t MAX_USERNAME_LENGTH = 12;
 	static inline size_t MIN_USERNAME_LENGTH = 3;
-	static inline bool PASSWORD_REQUIRED;
-	static inline std::string SERVER_HASHED_PASSWORD;
 	static inline std::string UNALLOWED_CHARACTERS = "/\\{}|.,()~` ";
 };

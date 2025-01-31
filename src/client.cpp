@@ -96,8 +96,6 @@ int main()
 	SSLSetup::initOpenssl();
 
 	FileSystem::createDirectory(FilePaths::keysDirectory);
-	FileSystem::createDirectory(FilePaths::receivedKeysDirectory);
-
 	GenerateKeys::generateCertAndPrivateKey(FilePaths::clientPrivateKeyCertPath, FilePaths::clientCertPath);
 
 	SSL_CTX *ctx = SSLSetup::createCTX(TLS_client_method());
@@ -108,7 +106,7 @@ int main()
 	SSL *ssl = SSL_new(ctx);
 	SSL_set_fd(ssl, socketfd);
 
-	shutdownHandler = [&](int signal)
+	shutdownHandler = [&]()
 	{
 		ClientSync::shutdownRequested = true;
 		{
