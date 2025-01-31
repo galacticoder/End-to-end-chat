@@ -49,7 +49,7 @@ void handleClient(SSL *ssl, int &clientSocket)
 		message.append(fmt::format("|{}", clientUsername) + Signals::SignalManager::getSignalAsString(Signals::SignalType::CLIENTMESSAGE));
 		std::cout << "Client message: " << message << std::endl;
 
-		if (!Send::Server::broadcastMessageToClients(ssl, message, ClientManagement::clientSSLSockets))
+		if (!Send::Server::broadcastMessageToClients(ssl, message, ClientManagement::clientSSLSockets, ClientManagement::clientPublicKeys))
 		{
 			CleanUp::Server::cleanUpClient(ssl, clientSocket, clientUsername);
 			return;

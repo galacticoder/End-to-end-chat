@@ -52,40 +52,47 @@ namespace Send
 		int bytesWritten = SSL_write(ssl, data, length);
 		if (!SSLerrors::checkBytesError(ssl, bytesWritten, std::string(file.value.data()), line, "write"))
 			return false;
+
 		return true;
 	}
 
 	struct Server
 	{
-		static bool broadcastMessageToClients(SSL *ssl, std::string &message, std::vector<SSL *> &clientSSLSockets)
+		static bool broadcastMessageToClients(SSL *ssl, std::string &message, std::vector<SSL *> &clientSSLSockets, std::map<std::string, std::string> &clientPublicKeys)
 		{
-			std::cout << "Broadcasting message: " << message << std::endl;
-			for (SSL *socket : clientSSLSockets)
-				if (socket != ssl)
-					if (!sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(socket, message.data(), message.size()))
-						return false;
+			if (clientPublicKeys.size() > 1)
+			{
+				std::cout << "Broadcasting message: " << message << std::endl;
+				for (SSL *socket : clientSSLSockets)
+					if (socket != ssl)
+						if (!sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(socket, message.data(), message.size()))
+							return false;
+			}
 			return true;
 		}
 
 		static void broadcastClientJoinOrExitMessage(SSL *ssl, const std::string &clientUsername, std::map<std::string, std::string> &clientPublicKeys, std::vector<SSL *> &clientSSLSockets, const std::string &signalString, const bool isJoining)
 		{
-			std::string message = fmt::format("{} has {} the chat", clientUsername, isJoining ? "joined" : "left");
-			std::cout << fmt::format("Broadcasting client {} message: {}", isJoining ? "join" : "exit", message) << std::endl;
-
-			for (auto const &[key, val] : clientPublicKeys)
+			if (clientPublicKeys.size() > 1)
 			{
-				if (key != clientUsername)
+				std::string message = fmt::format("{} has {} the chat", clientUsername, isJoining ? "joined" : "left");
+				std::cout << fmt::format("Broadcasting client {} message: {}", isJoining ? "join" : "exit", message) << std::endl;
+
+				for (auto const &[key, val] : clientPublicKeys)
 				{
-					EVP_PKEY *loadKey = LoadKey::loadPublicKeyInMemory(val);
+					if (key != clientUsername)
+					{
+						EVP_PKEY *loadKey = LoadKey::loadPublicKeyInMemory(val);
 
-					std::string encryptedMessage = Encode::base64Encode(Encrypt::encryptDataRSA(loadKey, message)).append(signalString);
+						std::string encryptedMessage = Encode::base64Encode(Encrypt::encryptDataRSA(loadKey, message)).append(signalString);
 
-					EVP_PKEY_free(loadKey);
+						EVP_PKEY_free(loadKey);
 
-					for (SSL *socket : clientSSLSockets)
-						if (socket != ssl)
-							if (!sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(socket, encryptedMessage.data(), encryptedMessage.size()))
-								return;
+						for (SSL *socket : clientSSLSockets)
+							if (socket != ssl)
+								if (!sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(socket, encryptedMessage.data(), encryptedMessage.size()))
+									return;
+					}
 				}
 			}
 		}

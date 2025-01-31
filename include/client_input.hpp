@@ -3,19 +3,16 @@
 #include <iostream>
 #include <string>
 #include <thread>
-#include <unistd.h>
-#include <cstring>
+#include <atomic>
+#include <mutex>
+#include <condition_variable>
 #include <sys/wait.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <atomic>
 #include <sys/select.h>
-#include <errno.h>
-#include <future>
 #include <signal.h>
-
-int pipefd[2];
-pid_t child_pid;
+#include <termios.h>
+#include <unistd.h>
 
 namespace ClientSync
 {
@@ -27,36 +24,30 @@ namespace ClientSync
 
 namespace ClientInput
 {
-	void trimws(std::string *str)
+	int pipefd[2];
+	pid_t child_pid;
+
+	void trimWhitespaces(std::string &str)
 	{
-		(*str).erase(0, (*str).find_first_not_of(" \t\n\r"));
-		(*str).erase((*str).find_last_not_of(" \t\n\r") + 1);
-	};
+		str.erase(0, str.find_first_not_of(" \t\n\r"));
+		str.erase(str.find_last_not_of(" \t\n\r") + 1);
+	}
 
 	void messageInput(int writePipe)
 	{
-		while (ClientSync::threadRunning)
+		std::string line;
+		while (ClientSync::threadRunning && std::getline(std::cin, line))
 		{
-			std::string line;
-
-			if (!std::getline(std::cin, line))
-				break;
-
 			if (!ClientSync::threadRunning)
 				break;
 
-			if (write(writePipe, line.c_str(), line.size()) == -1)
+			if (write(writePipe, line.c_str(), line.size()) == -1 ||
+				write(writePipe, "\n", 1) == -1)
 			{
-				perror("Child: write");
-				break;
-			}
-			if (write(writePipe, "\n", 1) == -1)
-			{
-				perror("Child: write newline");
+				perror("Child: write error");
 				break;
 			}
 		}
-
 		close(writePipe);
 		_exit(0);
 	}
@@ -91,26 +82,25 @@ namespace ClientInput
 
 	std::string typeAndReceiveMessageBack()
 	{
-		char buffer[256];
+		char buffer[256] = {0};
 		fd_set readfds;
 		FD_ZERO(&readfds);
 		FD_SET(pipefd[0], &readfds);
 
-		struct timeval timeout;
-		timeout.tv_sec = 0;
-		timeout.tv_usec = 0;
-
-		int retval = select(pipefd[0] + 1, &readfds, NULL, NULL, &timeout);
+		timeval timeout = {0, 0};
+		int retval = select(pipefd[0] + 1, &readfds, nullptr, nullptr, &timeout);
 
 		if (retval == -1)
 		{
-			if (errno == EINTR)
-				return "";
-			perror("select");
-			ClientSync::threadRunning = false;
+			if (errno != EINTR)
+			{
+				perror("select error");
+				ClientSync::threadRunning = false;
+			}
 			return "";
 		}
-		else if (retval > 0)
+
+		if (retval > 0)
 		{
 			ssize_t bytesRead = read(pipefd[0], buffer, sizeof(buffer) - 1);
 			if (bytesRead > 0)
@@ -118,30 +108,16 @@ namespace ClientInput
 				buffer[bytesRead] = '\0';
 				return std::string(buffer);
 			}
-			else if (bytesRead == 0)
-			{
-				ClientSync::threadRunning = false;
-				return "";
-			}
-			else
-			{
-				perror("Parent read");
-				ClientSync::threadRunning = false;
-				return "";
-			}
+			ClientSync::threadRunning = (bytesRead != 0);
 		}
-		else
-		{
-			return "";
-		}
+		return "";
 	}
 
 	void cleanUpProcesses()
 	{
 		kill(child_pid, SIGINT);
 		shutdown(pipefd[1], SHUT_WR);
-		int status;
-		waitpid(child_pid, &status, WNOHANG);
+		waitpid(child_pid, nullptr, WNOHANG);
 		close(pipefd[0]);
 	}
 };

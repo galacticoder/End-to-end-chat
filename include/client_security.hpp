@@ -9,6 +9,7 @@
 #include "send_receive.hpp"
 #include "bcrypt.h"
 #include "signals.hpp"
+#include "client_input.hpp"
 
 extern std::string username;
 
@@ -31,7 +32,6 @@ private:
 		HandleSignal(getSignal, validateUsername);
 
 		FilePaths::setKeyPaths(username);
-
 		return true;
 	}
 

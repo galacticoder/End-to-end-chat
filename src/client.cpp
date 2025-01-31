@@ -75,7 +75,7 @@ void communicateWithServer(SSL *ssl)
 	while (ClientSync::threadRunning)
 	{
 		std::string message = ClientInput::typeAndReceiveMessageBack();
-		ClientInput::trimws(&message);
+		ClientInput::trimWhitespaces(message);
 
 		if (!message.empty())
 		{
