@@ -36,44 +36,31 @@ std::condition_variable ssl_cv;
 
 void receiveMessages(SSL *ssl, CryptoPP::byte *key, size_t keySize, CryptoPP::byte *iv, size_t ivSize)
 {
+	const int sslfd = SSL_get_fd(ssl);
+	struct timeval timeout = {0, 100000};
+
 	while (threadRunning)
 	{
 		fd_set readfds;
 		FD_ZERO(&readfds);
-		FD_SET(SSL_get_fd(ssl), &readfds);
+		FD_SET(sslfd, &readfds);
 
-		struct timeval timeout;
-		timeout.tv_sec = 0;
-		timeout.tv_usec = 100000;
-
-		if (select(SSL_get_fd(ssl) + 1, &readfds, nullptr, nullptr, &timeout) > 0)
+		if (select(sslfd + 1, &readfds, nullptr, nullptr, &timeout) > 0)
 		{
 			std::string message;
-			{
-				std::unique_lock<std::mutex> lock(ssl_mutex);
-				if (message = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl); message.empty())
-				{
-					threadRunning = false;
-					std::cout << "Server killed" << std::endl;
-					break;
-				}
-			}
 
-			if (!threadRunning)
+			if (message = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl); message.empty())
+			{
+				std::cout << "Server killed" << std::endl;
 				break;
+			}
 
 			Signals::SignalType detectSignal = Signals::SignalManager::getSignalTypeFromMessage(message);
 			HandleSignal(detectSignal, message, key, keySize, iv, ivSize);
 		}
-		else
-		{
-			std::unique_lock<std::mutex> lock(ssl_mutex);
-			if (!threadRunning)
-				break;
-		}
 	}
 
-	std::cout << fmt::format("{} thread exited", __FUNCTION__) << std::endl;
+	raise(SIGINT);
 	ssl_cv.notify_one();
 }
 
@@ -109,16 +96,10 @@ void communicateWithServer(SSL *ssl)
 			if (!Send::sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl, ciphertext.data(), ciphertext.size()))
 				break;
 		}
-		else
-		{
-			if (!threadRunning)
-				break;
-		}
 	}
 
 	ssl_cv.notify_one();
 	receiveMessageThread.join();
-	std::cout << fmt::format("{} function exited", __FUNCTION__) << std::endl;
 }
 
 int main()
@@ -134,7 +115,6 @@ int main()
 	SSLSetup::configureCTX(ctx, FilePaths::clientCertPath, FilePaths::clientPrivateKeyCertPath);
 
 	int socketfd = Networking::startClientSocket(PORT, SERVER_IP_ADDRESS);
-	std::signal(SIGINT, signalHandle);
 
 	SSL *ssl = SSL_new(ctx);
 	SSL_set_fd(ssl, socketfd);
@@ -148,6 +128,8 @@ int main()
 		}
 		ssl_cv.notify_one();
 	};
+
+	std::signal(SIGINT, signalHandle);
 
 	if (SSL_connect(ssl) <= 0)
 	{
