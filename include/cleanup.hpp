@@ -19,7 +19,7 @@ namespace CleanUp
 	}
 	class Server
 	{
-	protected:
+	private:
 		static void freeAndDeleteSSLSocket(SSL *ssl)
 		{
 			if (ssl)
@@ -60,6 +60,28 @@ namespace CleanUp
 			deleteUserPublicKey(clientUsername);
 			close(clientSocket);
 			std::cout << "Cleaned up client" << std::endl;
+		}
+
+		static void cleanUpServer(SSL_CTX *ctx, int &serverSocket)
+		{
+			cleanUpOpenssl();
+
+			if (ctx != nullptr)
+			{
+				SSL_CTX_free(ctx);
+				ctx = nullptr;
+			}
+			if (serverSocket != -1)
+			{
+				close(serverSocket);
+				serverSocket = -1;
+			}
+
+			for (SSL *socket : ClientManagement::clientSSLSockets)
+				if (socket)
+					SSL_free(socket);
+
+			FileSystem::deletePath(FilePaths::keysDirectory);
 		}
 	};
 

@@ -19,13 +19,15 @@
 #include "../include/send_receive.hpp"
 #include "../include/bcrypt.h"
 
-std::string clientUsername;
-
 void handleClient(SSL *ssl, int &clientSocket)
 {
+	std::string clientUsername;
+	if (clientUsername = Receive::receiveMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(ssl); clientUsername.empty())
+		return;
+
 	ClientManagement::clientSSLSockets.push_back(ssl);
 
-	if (!Validate::validateAndSetupClient(ssl))
+	if (!Validate::validateAndSetupClient(ssl, clientUsername))
 	{
 		CleanUp::Server::cleanUpClient(ssl, clientSocket);
 		return;
@@ -72,11 +74,7 @@ int main()
 	shutdownHandler = [&](int signal)
 	{
 		std::cout << fmt::format("\nSignal {} caught. Killing server", strsignal(signal)) << std::endl;
-		CleanUp::cleanUpOpenssl();
-		// clean up clients here from vectors ssl
-		close(serverSocket);
-		SSL_CTX_free(ctx);
-		FileSystem::deletePath(FilePaths::keysDirectory);
+		CleanUp::Server::cleanUpServer(ctx, serverSocket);
 		exit(signal);
 	};
 
