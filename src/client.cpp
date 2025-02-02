@@ -24,7 +24,7 @@
 #include "../include/cleanup.hpp"
 
 constexpr const char *SERVER_IP_ADDRESS = "127.0.0.1";
-constexpr int PORT = 8080;
+constexpr int PORT = 49152;
 
 std::vector<std::string> publicKeys;
 std::string username;
@@ -70,8 +70,8 @@ void communicateWithServer(SSL *ssl)
 	std::thread receiveMessageThread(receiveMessages, ssl, key, sizeof(key), iv, sizeof(iv));
 
 	std::cout << "You can now chat" << std::endl;
-
 	ClientInput::startMessageInput();
+
 	while (ClientSync::threadRunning)
 	{
 		std::string message = ClientInput::typeAndReceiveMessageBack();

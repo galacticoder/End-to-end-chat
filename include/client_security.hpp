@@ -7,7 +7,6 @@
 #include "file_handling.hpp"
 #include "keys.hpp"
 #include "send_receive.hpp"
-#include "bcrypt.h"
 #include "signals.hpp"
 #include "client_input.hpp"
 

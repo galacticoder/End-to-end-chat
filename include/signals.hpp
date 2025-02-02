@@ -10,7 +10,11 @@
 #include "keys.hpp"
 
 std::function<void()> shutdownHandler;
-void signalHandle(int signal) { shutdownHandler(); }
+void signalHandle(int signal)
+{
+	(void)signal;
+	shutdownHandler();
+}
 
 namespace Signals
 {
@@ -150,7 +154,7 @@ private:
 	{
 		CryptoPP::GCM<CryptoPP::AES>::Encryption setNewKey;
 
-		message = message.substr(0, message.size() - Signals::SignalManager::getSignalAsString(Signals::SignalType::NEWAESKEY).size());
+		message = message.substr(0, message.size() - Signals::SignalManager::signalStringSizes[(int)Signals::SignalType::NEWAESKEY]);
 		message = Decode::base64Decode(message);
 
 		EVP_PKEY *privateKey = LoadKey::loadPrivateKeyInMemory(ClientKeys::clientPrivateKeyString);

@@ -62,7 +62,7 @@ namespace Send
 		{
 			if (clientPublicKeys.size() > 1)
 			{
-				std::cout << "Broadcasting message: " << message << std::endl;
+				std::cout << "Broadcasting message" << std::endl;
 				for (SSL *socket : clientSSLSockets)
 					if (socket != ssl)
 						if (!sendMessage<WRAP_STRING_LITERAL(__FILE__), __LINE__>(socket, message.data(), message.size()))
@@ -71,12 +71,11 @@ namespace Send
 			return true;
 		}
 
-		static void broadcastClientJoinOrExitMessage(SSL *ssl, const std::string &clientUsername, std::map<std::string, std::string> &clientPublicKeys, std::vector<SSL *> &clientSSLSockets, const std::string &signalString, const bool isJoining)
+		static void broadcastRSAEncryptedMessageToClients(SSL *ssl, std::string &message, const std::string &clientUsername, std::map<std::string, std::string> &clientPublicKeys, std::vector<SSL *> &clientSSLSockets, const std::string &signalString)
 		{
 			if (clientPublicKeys.size() > 1)
 			{
-				std::string message = fmt::format("{} has {} the chat", clientUsername, isJoining ? "joined" : "left");
-				std::cout << fmt::format("Broadcasting client {} message: {}", isJoining ? "join" : "exit", message) << std::endl;
+				std::cout << fmt::format("Broadcasting encrypted message to clients: {}", message) << std::endl;
 
 				for (auto const &[key, val] : clientPublicKeys)
 				{
@@ -95,6 +94,12 @@ namespace Send
 					}
 				}
 			}
+		}
+
+		static void broadcastClientJoinOrExitMessage(SSL *ssl, const std::string &clientUsername, std::map<std::string, std::string> &clientPublicKeys, std::vector<SSL *> &clientSSLSockets, const std::string &signalString, const bool isJoining)
+		{
+			std::string message = fmt::format("{} has {} the chat", clientUsername, isJoining ? "joined" : "left");
+			broadcastRSAEncryptedMessageToClients(ssl, message, clientUsername, clientPublicKeys, clientSSLSockets, signalString);
 		}
 
 		static bool sendAllPublicKeys(SSL *ssl, const std::string &currentClientUsername, std::map<std::string, std::string> &clientPublicKeys)
@@ -150,8 +155,7 @@ namespace Receive
 		char buffer[4096];
 		int bytesRead = SSL_read(ssl, buffer, 4096);
 
-		if (!SSLerrors::checkBytesError(ssl, bytesRead, std::string(file.value.data()), line, "write"))
-			return "";
+		SSLerrors::checkBytesError(ssl, bytesRead, std::string(file.value.data()), line, "receive");
 
 		buffer[bytesRead] = '\0';
 		return std::string(buffer, bytesRead);

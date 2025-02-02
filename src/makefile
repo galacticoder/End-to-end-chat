@@ -1,6 +1,6 @@
 CXX = g++
 CXXFLAGS = -Wall -Wextra -std=c++20 -g
-LIBS = -lfmt -lssl -lcrypto -lcryptopp ../lib/bcrypt.cpp ../lib/blowfish.cpp
+LIBS = -lfmt -lssl -lcrypto -lcryptopp
 
 TARGETS = server client
 

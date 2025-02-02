@@ -17,7 +17,6 @@
 #include "../include/encryption.hpp"
 #include "../include/cleanup.hpp"
 #include "../include/send_receive.hpp"
-#include "../include/bcrypt.h"
 
 void handleClient(SSL *ssl, int &clientSocket)
 {
@@ -46,7 +45,8 @@ void handleClient(SSL *ssl, int &clientSocket)
 			return;
 		}
 
-		message.append(fmt::format("|{}", clientUsername) + Signals::SignalManager::getSignalAsString(Signals::SignalType::CLIENTMESSAGE));
+		if (Signals::SignalManager::getSignalTypeFromMessage(message) == Signals::SignalType::UNKNOWN)
+			message.append(fmt::format("|{}", clientUsername) + Signals::SignalManager::getSignalAsString(Signals::SignalType::CLIENTMESSAGE));
 
 		std::cout << "Client message: " << message << std::endl;
 

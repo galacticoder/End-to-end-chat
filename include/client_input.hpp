@@ -3,6 +3,7 @@
 #include <iostream>
 #include <string>
 #include <thread>
+#include <filesystem>
 #include <atomic>
 #include <mutex>
 #include <condition_variable>
@@ -10,9 +11,12 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/select.h>
+#include <openssl/ssl.h>
 #include <signal.h>
 #include <termios.h>
 #include <unistd.h>
+#include "file_handling.hpp"
+#include "encryption.hpp"
 
 namespace ClientSync
 {
@@ -112,7 +116,6 @@ namespace ClientInput
 		}
 		return "";
 	}
-
 	void cleanUpProcesses()
 	{
 		kill(child_pid, SIGINT);
